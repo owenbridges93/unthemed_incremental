@@ -45,8 +45,8 @@ def click():
         print(f"Tier {pretty_num(math.ceil(save_data['critical_chance']))} Critical Click! Got {pretty_num(increment)} points.")
     else:
         increment = save_data["points_per_click"] * save_data["critical_multiplier"] ** (math.floor(save_data["critical_chance"]))
-        if save_data["critical_chance"] >= 1:
-            print(f"Tier {pretty_num(math.floor(save_data['critical_chance']))} Critical Click! Got {pretty_num(increment)} points.")
+        # if save_data["critical_chance"] >= 1:
+        #     print(f"Tier {pretty_num(math.floor(save_data['critical_chance']))} Critical Click! Got {pretty_num(increment)} points.")
         
     save_data["points"] += save_data["points_multiplier"] * increment
     update_window()
@@ -144,14 +144,14 @@ def create_window():
     for i in range(2):
         root.grid_columnconfigure(i, weight = 1)
 
-    points_text = ttk.Label(root, text = f'Points: {pretty_num(round(save_data["points"]))}')
-    pm_text = ttk.Label(root, text = f'Extra Points: {pretty_num(round((save_data["points_multiplier"] - 1) * 100))}%')
-    ppc_text = ttk.Label(root, text = f'Points Per Click: {pretty_num(save_data["points_per_click"])}')
-    acps_text = ttk.Label(root, text = f'AutoClicks Per Second: {pretty_num(save_data["autoclicks_per_second"])}')
-    cc_text = ttk.Label(root, text = f'Critical Chance: {pretty_num(save_data["critical_chance"] * 100)}%')
-    cm_text = ttk.Label(root, text = f'Critical Multiplier: {pretty_num(round(save_data["critical_multiplier"]))}x')
-    eppc_text = ttk.Label(root, text = f'Expected Points Per Click: {pretty_num(round(save_data["points_per_click"] * save_data["points_multiplier"] * (1 - save_data["critical_chance"]) + save_data["points_per_click"] * save_data["critical_chance"] * save_data["critical_multiplier"]))}')
-    pps_text = ttk.Label(root, text = f'Points Per Second: {pretty_num(round(points_per_second))}')
+    points_text = ttk.Label(root, text = f'')
+    pm_text = ttk.Label(root, text = f'')
+    ppc_text = ttk.Label(root, text = f'')
+    acps_text = ttk.Label(root, text = f'')
+    cc_text = ttk.Label(root, text = f'')
+    cm_text = ttk.Label(root, text = f'')
+    eppc_text = ttk.Label(root, text = f'')
+    pps_text = ttk.Label(root, text = f'')
 
     points_text.grid(row = 0, column = 0, sticky = 'nsew')
     pm_text.grid(row = 0, column = 1, sticky = 'nsew')
@@ -163,11 +163,11 @@ def create_window():
     pps_text.grid(row = 3, column = 1, sticky = 'nsew')
 
     click_button = ttk.Button(root, text = "Click", command = click)
-    pm_upgrade_button = ttk.Button(root, text = f'Upgrade EP (Cost: {pretty_num(save_data["pm_cost"])})', command = pm_upgrade)
-    ppc_upgrade_button = ttk.Button(root, text = f'Upgrade PpC (Cost: {pretty_num(save_data["ppc_cost"])})', command = ppc_upgrade)
-    acps_upgrade_button  = ttk.Button(root, text = f'Upgrade aCpS (Cost: {pretty_num(save_data["acps_cost"])})', command = acps_upgrade)
-    cc_upgrade_button  = ttk.Button(root, text = f'Upgrade CC (Cost: {pretty_num(save_data["cc_cost"])})', command = cc_upgrade)
-    cm_upgrade_button  = ttk.Button(root, text = f'Upgrade CM (Cost: {pretty_num(save_data["cm_cost"])})', command = cm_upgrade)
+    pm_upgrade_button = ttk.Button(root, text = f'', command = pm_upgrade)
+    ppc_upgrade_button = ttk.Button(root, text = f'', command = ppc_upgrade)
+    acps_upgrade_button  = ttk.Button(root, text = f'', command = acps_upgrade)
+    cc_upgrade_button  = ttk.Button(root, text = f'', command = cc_upgrade)
+    cm_upgrade_button  = ttk.Button(root, text = f'', command = cm_upgrade)
     save_button  = ttk.Button(root, text = "Save", command = save)
     quit_button  = ttk.Button(root, text = "Quit", command = quit_game)
     
@@ -186,13 +186,15 @@ def create_window():
     return root
 
 def update_window():
+    expected_points_per_click = round(save_data["points_multiplier"] * save_data["points_per_click"] * (((1 - save_data["critical_chance"] % 1) * save_data["critical_multiplier"] ** math.floor(save_data["critical_chance"])) + (save_data["critical_chance"] % 1) * save_data["critical_multiplier"] ** math.ceil(save_data["critical_chance"])))
+
     points_text.config(text = f'Points: {pretty_num(round(save_data["points"]))}')
     pm_text.config(text = f'Extra Points: {pretty_num(round((save_data["points_multiplier"] - 1) * 100))}%')
     ppc_text.config(text = f'Points Per Click: {pretty_num(save_data["points_per_click"])}')
     acps_text.config(text = f'AutoClicks Per Second: {pretty_num(save_data["autoclicks_per_second"])}')
     cc_text.config(text = f'Critical Chance: {pretty_num(round(save_data["critical_chance"] * 100))}%')
     cm_text.config(text = f'Critical Multiplier: {pretty_num(save_data["critical_multiplier"])}x')
-    eppc_text.config(text = f'Expected Points Per Click: {pretty_num(round(save_data["points_per_click"] * save_data["points_multiplier"] * (1 - save_data["critical_chance"]) + save_data["points_per_click"] * save_data["critical_chance"] * save_data["critical_multiplier"]))}')
+    eppc_text.config(text = f'Expected Points Per Click: {pretty_num(expected_points_per_click)}')
     pps_text.config(text = f'Points Per Second: {pretty_num(round(points_per_second))}')
 
 
@@ -202,13 +204,12 @@ def update_window():
     cc_upgrade_button.config(text = f'Upgrade CC (Cost: {pretty_num(save_data["cc_cost"])})', command = cc_upgrade)
     cm_upgrade_button.config(text = f'Upgrade CM (Cost: {pretty_num(save_data["cm_cost"])})', command = cm_upgrade)
 
-
-
 if os.path.exists('save'):
     save_file = open('save', 'r', encoding = "utf-8")
     save_data = ast.literal_eval(save_file.read())
     save_file.close()
-    offline_points = round((time.time() - save_data["last_play_time"]) * save_data["points_multiplier"] * (save_data["autoclicks_per_second"] * save_data["points_per_click"] * ((1 - save_data["critical_chance"]) + save_data["critical_chance"] * save_data["critical_multiplier"])))
+    expected_points_per_click = round(save_data["points_multiplier"] * save_data["points_per_click"] * (((1 - save_data["critical_chance"] % 1) * save_data["critical_multiplier"] ** math.floor(save_data["critical_chance"])) + (save_data["critical_chance"] % 1) * save_data["critical_multiplier"] ** math.ceil(save_data["critical_chance"])))
+    offline_points = round((time.time() - save_data["last_play_time"]) * save_data["autoclicks_per_second"] * expected_points_per_click)
     print(f"Gained {pretty_num(offline_points)} points while offline.")
     save_data["points"] += offline_points
 else:
@@ -219,7 +220,7 @@ else:
 close_game = False
 
 def game_loop():
-    global prev_points, points_per_second
+    global prev_points, points_per_second, expected_points_per_click
     for i in range(save_data["autoclicks_per_second"]):
         click()
     points_per_second = save_data["points"] - prev_points
@@ -232,9 +233,9 @@ def game_loop():
 
 prev_points = save_data["points"]
 points_per_second = 0
-
 window = create_window()
 
 game_loop()
 
 window.mainloop()
+
