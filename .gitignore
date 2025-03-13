@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+
+.gitignore
+
+push.bat
+
+save
