@@ -38,17 +38,24 @@ def save():
     save_file.write(str(save_data))
     save_file.close()
 
-def click():
-    increment = save_data["critical_multiplier"] ** math.floor(save_data["critical_chance"])
-    if random.random() < save_data["critical_chance"] % 1:
-        increment *= save_data["critical_multiplier"] * save_data["points_per_click"]
-        print(f"Tier {pretty_num(math.ceil(save_data['critical_chance']))} Critical Click! Got {pretty_num(increment)} points.")
-    else:
-        increment = save_data["points_per_click"] * save_data["critical_multiplier"] ** (math.floor(save_data["critical_chance"]))
-        # if save_data["critical_chance"] >= 1:
-        #     print(f"Tier {pretty_num(math.floor(save_data['critical_chance']))} Critical Click! Got {pretty_num(increment)} points.")
-        
-    save_data["points"] += save_data["points_multiplier"] * increment
+def click(times = 1):
+    clicks = []
+    num_criticals = 0
+    for i in range(times):
+        clicks.append(round(save_data["points_per_click"] * save_data["points_multiplier"] * save_data["critical_multiplier"] ** math.floor(save_data["critical_chance"])))
+    
+        if random.random() < save_data["critical_chance"] % 1:
+            clicks[i] = round(clicks[i] * save_data["critical_multiplier"])
+            num_criticals += 1
+
+    increment = round(sum(clicks))
+
+    if num_criticals > 0:
+        if 1 in (num_criticals, times):
+            print(f"Tier {pretty_num(math.ceil(save_data['critical_chance']))} Critical Click! Got {pretty_num(increment)} points.")
+        else:
+            print(f"Got {pretty_num(increment)} Points from {pretty_num(num_criticals)} Tier {pretty_num(math.ceil(save_data['critical_chance']))} Critical Clicks.")
+    save_data["points"] += increment
     update_window()
 
 def acps_upgrade():
@@ -56,7 +63,7 @@ def acps_upgrade():
         print(f"Upgraded AutoClicks per Second for {pretty_num(save_data['acps_cost'])} points.")
         save_data["points"] -= save_data["acps_cost"]
         save_data["autoclicks_per_second"] += 1
-        save_data["acps_cost"] = math.floor(save_data["acps_cost"] * 1.5)
+        save_data["acps_cost"] = round(1000 * 1.5 ** (save_data["autoclicks_per_second"]))
         update_window()
 
 def pm_upgrade():
@@ -64,7 +71,7 @@ def pm_upgrade():
         print(f"Upgraded Points Multiplier for {pretty_num(save_data['pm_cost'])} points.")
         save_data["points"] -= save_data["pm_cost"]
         save_data["points_multiplier"] += 0.1
-        save_data["pm_cost"] = math.ceil(0.8 * save_data["pm_cost"] * 1.5)
+        save_data["pm_cost"] = math.ceil((save_data["points_multiplier"] * 10) ** 2)
         update_window()
 
 def ppc_upgrade():
@@ -72,9 +79,7 @@ def ppc_upgrade():
         print(f"Upgraded Points per Click for {pretty_num(save_data['ppc_cost'])} points.")
         save_data["points"] -= save_data["ppc_cost"]
         save_data["points_per_click"] += 1
-        save_data["ppc_cost"] += 10
-        if save_data["points_per_click"] % 10 == 0:
-            save_data["ppc_cost"] = 2 * round(save_data["ppc_cost"], -2)
+        save_data["ppc_cost"] = 10 * (save_data["points_per_click"] % 10) + 200 * min(1, math.floor(save_data["points_per_click"] / 10)) * 2 ** (math.floor(save_data["points_per_click"] / 10) - 1)
         update_window()
 
 def cc_upgrade():
@@ -82,7 +87,7 @@ def cc_upgrade():
         print(f"Upgraded Critical Click Chance for {pretty_num(save_data['cc_cost'])} points.")
         save_data["points"] -= save_data["cc_cost"]
         save_data["critical_chance"] = round(save_data["critical_chance"] + 0.01, 2)
-        save_data["cc_cost"] = math.ceil(save_data["cc_cost"] * 1.1)
+        save_data["cc_cost"] = math.ceil(10000 * 1.1 ** (save_data["critical_chance"] * 100))
         update_window()
 
 def cm_upgrade():
@@ -90,7 +95,7 @@ def cm_upgrade():
         print(f"Upgraded Critical Click Multiplier for {pretty_num(save_data['cm_cost'])} points.")
         save_data["points"] -= save_data["cm_cost"]
         save_data["critical_multiplier"] += 2
-        save_data["cm_cost"] = round((save_data["cm_cost"] + 20000) * 1.05)
+        save_data["cm_cost"] = round((100000 + 10000 * (save_data["critical_multiplier"] - 10)) * 1.025)
         update_window()
 
 def quit_game():
@@ -221,8 +226,8 @@ close_game = False
 
 def game_loop():
     global prev_points, points_per_second, expected_points_per_click
-    for i in range(save_data["autoclicks_per_second"]):
-        click()
+
+    click(save_data["autoclicks_per_second"])
     points_per_second = save_data["points"] - prev_points
     prev_points = save_data["points"]
 
