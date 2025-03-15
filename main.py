@@ -64,31 +64,40 @@ def safe_int(num):
 
 # Handle a click event
 def click(times = 1):
-    # Make empty list to record all point increments from clicks
-    clicks = []
+    # Make empty array to record all point increments from clicks and whether or not they were critical
+    clicks = [[], []]
 
-    # Initialize variable to record the number of critical clicks
-    num_criticals = 0
+    # Calculate points increment from basic and critical clicks
+    gain_from_click = round(save_data["ppc"] * save_data["pm"] * save_data["cm"] ** math.floor(save_data["cc"]))
+    gain_from_critical = round(gain_from_click * save_data["cm"])
 
     # Populate the clicks list with point increments
     for i in range(times):
-        # Add a basic click to clicks
-        clicks.append(round(save_data["ppc"] * save_data["pm"] * save_data["cm"] ** math.floor(save_data["cc"])))
+        # Generate a basic click
+        click = [gain_from_click, 0]
     
-        # Attempt to make the click critical, multiplying by the critical multiplier and adding to the critical counter if successful
+        # Attempt to make the click critical, multiplying by the critical multiplier and marking the click as critical if successful
         if random.random() < save_data["cc"] % 1:
-            clicks[i] = round(clicks[i] * save_data["cm"])
-            num_criticals += 1
-
+            click[0] = gain_from_critical
+            click[1] = 1
+        
+        # Append click and whether it was critical to clicks
+        clicks[0].append(click[0])
+        clicks[1].append(click[1])
+    
     # Calculate the total increment to add to the amount of points
-    increment = round(sum(clicks))
+    increment = round(sum(clicks[0]))
+
+    # Calculate how number of criticals and points increment from them
+    num_criticals = sum([1 for item in clicks[1] if (item == 1)])
+    gain_from_criticals = gain_from_critical * num_criticals
 
     # If critical clicks were rolled, print a message to display information about them
-    if num_criticals > 0:
-        if 1 in (num_criticals, times):
-            print(f"Tier {pretty_num(math.ceil(save_data['cc']))} Critical Click! Got {pretty_num(increment)} points.")
+    if gain_from_criticals > 0:
+        if num_criticals == 1:
+            print(f"Tier {pretty_num(math.ceil(save_data['cc']))} Critical Click! Got {pretty_num(gain_from_criticals)} points.")
         else:
-            print(f"Got {pretty_num(increment)} Points from {pretty_num(num_criticals)} Tier {pretty_num(math.ceil(save_data['cc']))} Critical Clicks.")
+            print(f"Got {pretty_num(gain_from_criticals)} Points from {pretty_num(num_criticals)} Tier {pretty_num(math.ceil(save_data['cc']))} Critical Clicks.")
     
     # Add increment to the amount of points the user has
     save_data["points"] += increment
@@ -97,22 +106,22 @@ def click(times = 1):
     update_window()
 
 # Calculate the cost of an upgrade
-def calc_upgrade_cost(upgrade_type, target_value, cost_scaler = 7):
+def calc_upgrade_cost(attribute, target_value):
 
     # Define functions to return the cost of upgrading an attribute to num level(s)
     formulas = {
         "acps" : lambda num: round(1000 * 1.5 ** num),
-        "pm" : lambda num: math.ceil((num * (100 ** (1 / cost_scaler))) ** cost_scaler),
+        "pm" : lambda num: math.ceil(100 * 1.25 ** ((num - 1) * 10)),
         "ppc" : lambda num: 10 * (num % 10) + 200 * min(1, math.floor(num / 10)) * 2 ** (math.floor(num / 10) - 1),
-        "cc" : lambda num: math.ceil(10000 * 1.1 ** (num * 100)),
-        "cm" : lambda num: round(100000 + 10000 * num * 1.025 ** num)
+        "cc" : lambda num: math.ceil(10000 * 1.1 ** ((num - 0.01) * 100)),
+        "cm" : lambda num: round(100000 + 10000 * (num - 10) * 1.025 ** (num - 10))
     }
     
     # Return the cost for upgrading the attribute to target_value
-    return formulas[upgrade_type](target_value)
+    return formulas[attribute](target_value)
 
 # Construct the display message for upgrading something
-def calc_upgrade_message(upgrade_type, cost):
+def calc_upgrade_message(attribute, cost):
     # Define the messages for each attribute
     messages = {
         "acps" : "AutoClicks per Second",
@@ -124,39 +133,63 @@ def calc_upgrade_message(upgrade_type, cost):
 
     # Construct a string with the attribute upgraded, amount of times it was upgraded, and the cost of the upgrade
     if save_data["current_buy_amount"] == 1:
-        message = f"Upgraded {messages[upgrade_type]} for {pretty_num(cost)} points."
+        message = f"Upgraded {messages[attribute]} for {pretty_num(cost)} points."
     else:
-        message = f'Upgraded {messages[upgrade_type]} {pretty_num(save_data["current_buy_amount"])} times for {pretty_num(cost)} points.'
+        message = f'Upgraded {messages[attribute]} {pretty_num(save_data["current_buy_amount"])} times for {pretty_num(cost)} points.'
 
     # Return the constructed message
     return message
 
 # Handle an upgrade event 
-def upgrade(upgrade_type):
+def upgrade(attribute):
     # Access the save_data list for manipulation
     global save_data
 
     # Find the current level of the attribute and what to increment it by
-    prev_amount = save_data[upgrade_type]
-    increment = save_data["current_buy_amount"] * increase_per_upgrade[upgrade_type]
+    prev_amount = save_data[attribute]
+    increment = save_data["current_buy_amount"] * increase_per_upgrade[attribute]
 
     # Find the cost to upgrade the attribute to the target value by taking a series of the upgrades leading up to it
-    upgrade_cost = sum([calc_upgrade_cost(upgrade_type, save_data[upgrade_type] + i * increase_per_upgrade[upgrade_type]) for i in range(save_data["current_buy_amount"])])
+    upgrade_cost = sum([calc_upgrade_cost(attribute, save_data[attribute] + i * increase_per_upgrade[attribute]) for i in range(save_data["current_buy_amount"])])
 
     # If the user can afford the upgrade, go through with it
     if upgrade_cost <= save_data["points"]:
         # Add the the attribute value
-        save_data[upgrade_type] += increment
+        save_data[attribute] += increment
 
         # Charge the user for the upgrade(s)
         save_data["points"] -= upgrade_cost
 
         # Print the transaction information in the console
-        print(calc_upgrade_message(upgrade_type, upgrade_cost))
+        print(calc_upgrade_message(attribute, upgrade_cost))
 
         # Update the window and display costs for upgrades
         update_window()
         update_display_costs()
+    else:
+        print("You can't afford that upgrade.")
+
+# Upgrade an attribute the maximum amount of times
+def max_upgrade(attribute):
+    # Store the current value of current_buy_amount in save_data
+    current_buy_amount = save_data["current_buy_amount"]
+
+    # Find the maximum amount of upgrades that the user can afford for the attribute
+    save_data["current_buy_amount"] = 0
+    while determine_cost(attribute) <= save_data["points"]:
+        save_data["current_buy_amount"] += 1
+    save_data["current_buy_amount"] -= 1
+
+    # If the amount is greater than 0, upgrade the attribute
+    if save_data["current_buy_amount"] > 0:
+        upgrade(attribute)
+    
+    # Return current_buy_amount in save_data to its original value
+    save_data["current_buy_amount"] = current_buy_amount
+
+    # Update the window button values
+    update_window()
+    update_display_costs()
 
 # Change how many times an upgrade is purchased per button click
 def cycle_buy_amount():
@@ -384,7 +417,7 @@ def update_window():
 def update_display_costs():
     # Access and update next_upgrade_costs 
     global next_upgrade_costs
-    next_upgrade_costs = {upgrade_type: determine_cost(upgrade_type) for upgrade_type in upgrade_types}
+    next_upgrade_costs = {attribute: determine_cost(attribute) for attribute in attributes}
 
 
     # Define list of buttons used for upgrades
@@ -395,7 +428,7 @@ def update_display_costs():
 
     # Update each upgrade button with names and costs
     for i in range(len(upgrade_buttons)):
-        upgrade_buttons[i].config(text = f'Upgrade {upgrade_names[i]} (Cost: {pretty_num(next_upgrade_costs[upgrade_types[i]])})', command = lambda to_upgrade = upgrade_types[i]: upgrade(to_upgrade))
+        upgrade_buttons[i].config(text = f'Upgrade {upgrade_names[i]} (Cost: {pretty_num(next_upgrade_costs[attributes[i]])})', command = lambda to_upgrade = attributes[i]: upgrade(to_upgrade))
 
 # Adjust the font size for the game window
 def adjust_font_size():
@@ -429,9 +462,10 @@ def game_loop():
 
     # If the autobuyer is active, go through each attribute and upgrade them as many times as possible
     if save_data["autobuyer_state"]:
-        for cost_key in auto_upgrade_priority:
-            while next_upgrade_costs[cost_key] <= save_data["points"]:
-                upgrade(cost_key)
+        print("\nAutobuyer: ")
+        for attribute in auto_upgrade_priority:
+            max_upgrade(attribute)
+        print("\n")
 
     # Call game_loop again after 1 second
     window.after(1000, game_loop)
@@ -460,7 +494,7 @@ else:
     save_data = {'points': 0, 'ppc': 1, 'pm': 1, 'acps': 0, 'cc': 0.01, 'cm': 10, 'current_buy_amount': 1, 'autobuyer_state': False, 'last_play_time': time.time()}
 
 # Define attributes that can be upgraded and prioritize them for the autobuyer
-upgrade_types = ['ppc', 'pm', 'acps', 'cc', 'cm']
+attributes = ['ppc', 'pm', 'acps', 'cc', 'cm']
 auto_upgrade_priority = ['acps', 'cc', 'ppc', 'pm', 'cm']
 
 # Define how much each attribute should be incremented by per upgrade
@@ -474,7 +508,7 @@ increase_per_upgrade = {
 
 # Define function to more consisely find the cost of upgrading a specific attribute a certain amount of times and use it to calculate costs for every attribute
 determine_cost = lambda cost_type : sum([calc_upgrade_cost(cost_type, save_data[cost_type] + i * increase_per_upgrade[cost_type]) for i in range(save_data["current_buy_amount"])])
-next_upgrade_costs = {upgrade_type: determine_cost(upgrade_type) for upgrade_type in upgrade_types}
+next_upgrade_costs = {attribute: determine_cost(attribute) for attribute in attributes}
 
 # Initialize values used in the game_loop function
 prev_points = save_data["points"]
