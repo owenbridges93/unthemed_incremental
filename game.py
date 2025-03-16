@@ -543,7 +543,7 @@ else:
 
 # Define attributes that can be upgraded and prioritize them for the autobuyer
 attributes = ['ppc', 'pm', 'acps', 'cc', 'cm']
-auto_upgrade_priority = ['acps', 'cc', 'ppc', 'pm', 'cm']
+auto_upgrade_priority = ['acps', 'cc', 'cm', 'ppc', 'pm']
 
 # Define how much each attribute should be incremented by per upgrade
 increase_per_upgrade = {
@@ -571,4 +571,3 @@ game_loop()
 
 # Create the game window
 window.mainloop()
-
