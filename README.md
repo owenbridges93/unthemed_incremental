@@ -1,6 +1,6 @@
 # Unthemed Incremental
 
-> This is a game with a basic UI that is meant to capture the 
+> [This](https://github.com/owenbridges93/unthemed_incremental) is a game with a basic UI that is meant to capture the 
 > mechanics that first made incremental/idle games so enjoyable.
 
 > The batch file extension (obviously) isn't compatible with 
