@@ -8,6 +8,7 @@ import math
 import ast
 import random
 import time
+import platform
 
 # Return a number that is easily readable to display for the user
 def pretty_num(num):
@@ -494,7 +495,7 @@ def game_loop():
                     upgrade(attribute)
             
             # Visually seperate autobuyer purchases from everything else
-            print("\n")
+            print()
 
             # Revert current_buy_amount in save_data to the previous quantity
             save_data["current_buy_amount"] = current_buy_amount
@@ -505,6 +506,20 @@ def game_loop():
 
     # Call game_loop again after 1 second
     window.after(1000, game_loop)
+
+# Define clear commands native to the big three operating systems
+clear_commands = {
+    "Windows" : "cls",
+    "Darwin" : "clear",
+    "Linux" : "clear"
+}
+
+# Fetch the user's operating system
+user_os = platform.system()
+
+# If the clear command for it is known, clear the console
+if user_os in clear_commands:
+    os.system(clear_commands[user_os])
 
 # If a save file exists, access it, else make one
 if os.path.exists('assets/save'):
@@ -525,9 +540,6 @@ else:
     # Create new save data
     # ppc = Points per click, pm = Points multiplier, acps = Autoclicks per second, cc = Critical chance, cm = Critical multiplier
     save_data = {'points': 0, 'ppc': 1, 'pm': 1, 'acps': 0, 'cc': 0.01, 'cm': 10, 'current_buy_amount': 1, 'autobuyer_state': False, 'last_play_time': time.time()}
-
-# Clear the console before starting the game
-os.system("cls")
 
 # Define attributes that can be upgraded and prioritize them for the autobuyer
 attributes = ['ppc', 'pm', 'acps', 'cc', 'cm']
