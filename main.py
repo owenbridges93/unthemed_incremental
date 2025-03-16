@@ -68,8 +68,8 @@ def click(times = 1):
     clicks = [[], []]
 
     # Calculate points increment from basic and critical clicks
-    gain_from_click = round(save_data["ppc"] * save_data["pm"] * save_data["cm"] ** math.floor(save_data["cc"]))
-    gain_from_critical = round(gain_from_click * save_data["cm"])
+    gain_from_click = save_data["ppc"] * save_data["pm"] * save_data["cm"] ** math.floor(save_data["cc"])
+    gain_from_critical = gain_from_click * save_data["cm"]
 
     # Populate the clicks list with point increments
     for i in range(times):
@@ -90,7 +90,7 @@ def click(times = 1):
 
     # Calculate how number of criticals and points increment from them
     num_criticals = sum([1 for item in clicks[1] if (item == 1)])
-    gain_from_criticals = gain_from_critical * num_criticals
+    gain_from_criticals = round(gain_from_critical * num_criticals)
 
     # If critical clicks were rolled, print a message to display information about them
     if gain_from_criticals > 0:
@@ -169,8 +169,8 @@ def upgrade(attribute):
     else:
         print("You can't afford that upgrade.")
 
-# Upgrade an attribute the maximum amount of times
-def max_upgrade(attribute):
+# Find the maximum amount of times an attribute can be upgraded
+def find_max_upgrade(attribute):
     # Store the current value of current_buy_amount in save_data
     current_buy_amount = save_data["current_buy_amount"]
 
@@ -178,18 +178,12 @@ def max_upgrade(attribute):
     save_data["current_buy_amount"] = 0
     while determine_cost(attribute) <= save_data["points"]:
         save_data["current_buy_amount"] += 1
-    save_data["current_buy_amount"] -= 1
+    max_upgrade_num = save_data["current_buy_amount"] - 1
 
-    # If the amount is greater than 0, upgrade the attribute
-    if save_data["current_buy_amount"] > 0:
-        upgrade(attribute)
-    
     # Return current_buy_amount in save_data to its original value
     save_data["current_buy_amount"] = current_buy_amount
 
-    # Update the window button values
-    update_window()
-    update_display_costs()
+    return max_upgrade_num
 
 # Change how many times an upgrade is purchased per button click
 def cycle_buy_amount():
@@ -202,6 +196,9 @@ def cycle_buy_amount():
     # Update save_data with the next item in the list, wrapping around when needed
     save_data["current_buy_amount"] = amounts[(amounts.index(save_data["current_buy_amount"]) + 1) % len(amounts)]
 
+    # Log the new current buy amount
+    print(f"New buy amount per click: {save_data['current_buy_amount']}")
+
     # Update the window and upgrade costs
     update_window()
     update_display_costs()
@@ -213,6 +210,10 @@ def toggle_autobuyer():
 
     # Toggle the autobuyer on or off
     save_data["autobuyer_state"] = not (save_data["autobuyer_state"])
+
+    # Log the new state of the autobuyer
+    autobuyer_states = {True : "on", False : "off"}
+    print(f"Autobuyer toggled {autobuyer_states[save_data['autobuyer_state']]}.")
 
     # Update the window to display current autobuyer state
     update_window()
@@ -394,7 +395,7 @@ def create_window():
 # Update text labels and some buttons
 def update_window():
     # Recalculate point gain expected per click
-    expected_points_per_click = round(save_data["pm"] * save_data["ppc"] * (((1 - save_data["cc"] % 1) * save_data["cm"] ** math.floor(save_data["cc"])) + (save_data["cc"] % 1) * save_data["cm"] ** math.ceil(save_data["cc"])))
+    expected_points_per_click = round(save_data["ppc"] * save_data["pm"] * save_data["cm"] ** math.floor(save_data["cc"]) * ((1 - save_data["cc"] % 1) + save_data["cm"] * (save_data["cc"] % 1)))
 
     # Configure all labels to show current values from save_data
     points_text.config(text = f'Points: {pretty_num(round(save_data["points"]))}')
@@ -460,18 +461,50 @@ def game_loop():
     prev_points = save_data["points"]
 
 
-    # If the autobuyer is active, go through each attribute and upgrade them as many times as possible
+    # If the autobuyer is active, upgrade each attribute as many times as possible
     if save_data["autobuyer_state"]:
-        print("\nAutobuyer: ")
-        for attribute in auto_upgrade_priority:
-            max_upgrade(attribute)
-        print("\n")
+        # Initialize if any attributes can be upgraded
+        can_upgrade = False
+        
+        # Find amount of times each attribute could be upgraded with current points
+        upgrade_nums = [find_max_upgrade(attribute) for attribute in attributes]
+        
+        # If anything can be upgraded, set can_upgrade to true
+        for item in upgrade_nums:
+            if item > 0:
+                can_upgrade = True
+                break
+        
+        # If anything can be upgraded, activate the autobuyer
+        if can_upgrade:
+            # Store the current state of current_buy_amount in save_data
+            current_buy_amount = save_data["current_buy_amount"]
+
+            # Indicate that the following purchases are products of the autobuyer
+            print("\nAutobuyer: ")
+            
+            # Upgrade each attribute in order of auto_upgrade_priority
+            for attribute in auto_upgrade_priority:
+                # Find the maximum amount of times the attribute can be upgraded
+                max_upgrade = find_max_upgrade(attribute)
+
+                # If the attribute can be upgraded, do so
+                if max_upgrade > 0:
+                    save_data["current_buy_amount"] = max_upgrade
+                    upgrade(attribute)
+            
+            # Visually seperate autobuyer purchases from everything else
+            print("\n")
+
+            # Revert current_buy_amount in save_data to the previous quantity
+            save_data["current_buy_amount"] = current_buy_amount
+
+            # Update the game window
+            update_display_costs()
+            update_window()
 
     # Call game_loop again after 1 second
     window.after(1000, game_loop)
-
-# Clear the console before starting the game
-os.system("cls")
 
 # If a save file exists, access it, else make one
 if os.path.exists('assets/save'):
@@ -480,7 +513,7 @@ if os.path.exists('assets/save'):
         save_data = ast.literal_eval(save_file.read())
 
     # Calculate how many points the user gained while offline, notify the user, and give them the points
-    expected_points_per_click = round(save_data["pm"] * save_data["ppc"] * (((1 - save_data["cc"] % 1) * save_data["cm"] ** math.floor(save_data["cc"])) + (save_data["cc"] % 1) * save_data["cm"] ** math.ceil(save_data["cc"])))
+    expected_points_per_click = save_data["ppc"] * save_data["pm"] * save_data["cm"] ** math.floor(save_data["cc"]) * ((1 - save_data["cc"] % 1) + save_data["cm"] * (save_data["cc"] % 1))
     offline_points = round((time.time() - save_data["last_play_time"]) * save_data["acps"] * expected_points_per_click)
     print(f"Gained {pretty_num(offline_points)} points while offline.")
     save_data["points"] += offline_points
@@ -492,6 +525,9 @@ else:
     # Create new save data
     # ppc = Points per click, pm = Points multiplier, acps = Autoclicks per second, cc = Critical chance, cm = Critical multiplier
     save_data = {'points': 0, 'ppc': 1, 'pm': 1, 'acps': 0, 'cc': 0.01, 'cm': 10, 'current_buy_amount': 1, 'autobuyer_state': False, 'last_play_time': time.time()}
+
+# Clear the console before starting the game
+os.system("cls")
 
 # Define attributes that can be upgraded and prioritize them for the autobuyer
 attributes = ['ppc', 'pm', 'acps', 'cc', 'cm']
