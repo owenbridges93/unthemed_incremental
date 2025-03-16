@@ -8,4 +8,8 @@
 > on other operating systems is as easy as typing
 > "python3 game.py" in your console.
 
+> As this game is currently work in progress, I have three or
+> four ideas to substantially change both the frontend
+> and backend of the game.
+
 ## Have fun and please report it if you find bugs!
