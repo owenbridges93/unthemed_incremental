@@ -343,10 +343,9 @@ def create_window():
     text_style.configure("TButton", font=("TkDefaultFont", 12))
 
     # Define how many rows and columns the window should have
-    # Note: these MUST multiply to a value equal to or greater than the number of widgets the window has
-    game_window_rows = 10
+    game_window_rows = 9
     game_window_columns = 2
-
+        
     # Set a weight for each row and column
     for i in range(game_window_rows):
         game_window.grid_rowconfigure(i, weight = 1)
@@ -362,27 +361,71 @@ def create_window():
     cm_text = ttk.Label(game_window, text = f'')
     eppc_text = ttk.Label(game_window, text = f'')
     pps_text = ttk.Label(game_window, text = f'')
+
+    # Add the labels to the window
+    text_widgets = [points_text, pm_text, ppc_text, acps_text, cc_text, cm_text, eppc_text, pps_text]
+    for widget in text_widgets:
+        widget.grid(row = math.floor(text_widgets.index(widget) / game_window_columns), column = text_widgets.index(widget) % game_window_columns, sticky = 'nsew')
+    
+    # Initialize notebook to store buttons in tabs
+    game_tabs = ttk.Notebook(game_window)
+
+    # Initialize the tabs in the notebook
+    attributes_tab = ttk.Frame(game_tabs)
+    prestige_tab = ttk.Frame(game_tabs)
+    prestige_shop_tab = ttk.Frame(game_tabs)
+    menu_tab = ttk.Frame(game_tabs)
+
+    # Define display text for the tabs
+    tabs_display_text = {
+        attributes_tab : "Attributes",
+        prestige_tab : "Prestige",
+        prestige_shop_tab : "Prestige Shop",
+        menu_tab : "Menu"
+    }
+
+    # Add the tabs to the notebook with their display text
+    for tab in tabs_display_text:
+        game_tabs.add(tab, text = tabs_display_text[tab])
     
     # Initialize buttons for the window
-    click_button = ttk.Button(game_window, text = "Click", command = click)
-    pm_upgrade_button = ttk.Button(game_window, text = f'', command = lambda: upgrade("pm"))
-    ppc_upgrade_button = ttk.Button(game_window, text = f'', command = lambda: upgrade("ppc"))
-    acps_upgrade_button  = ttk.Button(game_window, text = f'', command = lambda: upgrade("acps"))
-    cc_upgrade_button  = ttk.Button(game_window, text = f'', command = lambda: upgrade("cc"))
-    cm_upgrade_button  = ttk.Button(game_window, text = f'', command = lambda: upgrade("cm"))
-    cba_button  = ttk.Button(game_window, text = f'', command = cycle_buy_amount)
-    autobuyer_button  = ttk.Button(game_window, text = f'', command = toggle_autobuyer)
-    placeholder_button = ttk.Button(game_window, text = f'Placeholder', command = placeholder_function)
-    info_button  = ttk.Button(game_window, text = 'Info', command = display_info)
-    save_button  = ttk.Button(game_window, text = "Save", command = save)
-    quit_button  = ttk.Button(game_window, text = "Quit", command = quit_game)
+    click_button = ttk.Button(attributes_tab, text = "Click", command = click)
+    pm_upgrade_button = ttk.Button(attributes_tab, text = f'', command = lambda: upgrade("pm"))
+    ppc_upgrade_button = ttk.Button(attributes_tab, text = f'', command = lambda: upgrade("ppc"))
+    acps_upgrade_button  = ttk.Button(attributes_tab, text = f'', command = lambda: upgrade("acps"))
+    cc_upgrade_button  = ttk.Button(attributes_tab, text = f'', command = lambda: upgrade("cc"))
+    cm_upgrade_button  = ttk.Button(attributes_tab, text = f'', command = lambda: upgrade("cm"))
+    cba_button  = ttk.Button(attributes_tab, text = f'', command = cycle_buy_amount)
+    autobuyer_button  = ttk.Button(attributes_tab, text = f'', command = toggle_autobuyer)
+    placeholder_button = ttk.Button(menu_tab, text = f'Placeholder', command = placeholder_function)
+    info_button  = ttk.Button(menu_tab, text = 'Info', command = display_info)
+    save_button  = ttk.Button(menu_tab, text = "Save", command = save)
+    quit_button  = ttk.Button(menu_tab, text = "Quit", command = quit_game)
     
-    # Define list of widgets and place them on the window grid
-    widgets = [points_text, pm_text, ppc_text, acps_text, cc_text, cm_text, eppc_text, pps_text, 
-               click_button, pm_upgrade_button, ppc_upgrade_button, acps_upgrade_button, cc_upgrade_button, cm_upgrade_button,
-               cba_button, autobuyer_button, placeholder_button, info_button, save_button, quit_button]
-    for widget in widgets:
-        widget.grid(row = math.floor(widgets.index(widget) / game_window_columns), column = widgets.index(widget) % game_window_columns, sticky = 'nsew')
+    # Calculate the amount of window rows that were used by labels
+    text_rows = math.ceil(len(text_widgets) / game_window_columns)
+
+    # Categorize the buttons into their respective tabs
+    button_widgets = {attributes_tab : [click_button, pm_upgrade_button, ppc_upgrade_button, acps_upgrade_button, cc_upgrade_button, cm_upgrade_button, cba_button, autobuyer_button], 
+                    # (future) put prestige here
+                    # (future) put prestige shop here
+                    menu_tab : [placeholder_button, info_button, save_button, quit_button]}
+    
+    # Use the categories of buttons to put them in their respective tabs
+    for tab in button_widgets:
+        for widget in button_widgets[tab]:
+            widget.grid(row = math.floor(button_widgets[tab].index(widget) / game_window_columns), column = button_widgets[tab].index(widget) % game_window_columns, sticky = 'nsew')
+
+    # Set weights for each row and column in each tab
+    for tab in tabs_display_text:
+        if tab in button_widgets:
+            for i in range(math.floor(len(button_widgets[tab]) / game_window_columns)):
+                tab.grid_rowconfigure(i, weight = 1)
+            for i in range(game_window_columns):
+                tab.grid_columnconfigure(i, weight = 1)
+
+    # Put the notebook of tabs into the window
+    game_tabs.grid(row = text_rows, column = 0, rowspan = game_window_rows - text_rows, columnspan = game_window_columns, sticky = "nsew")
 
     # Bind running quit game to when the window manager closes the window
     game_window.protocol("WM_DELETE_WINDOW", quit_game)
