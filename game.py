@@ -314,8 +314,8 @@ def create_window():
     game_window = tkinter.Tk()
 
     # Set the initial dimensions for the game window
-    window_width = 350
-    window_height = 180
+    window_width = 480
+    window_height = 260
 
     # Calculate the coordinates of the center of the screen
     screen_width = game_window.winfo_screenwidth()
@@ -405,11 +405,16 @@ def create_window():
     # Calculate the amount of window rows that were used by labels
     text_rows = math.ceil(len(text_widgets) / game_window_columns)
 
+    # Placeholder labels for unused tabs
+    ttk.Label(prestige_tab, text = "There is not yet a prestige system, this is a placeholder tab.").grid(row = 0, column = 0)
+    ttk.Label(prestige_shop_tab, text = "There is not yet a prestige shop, this is a placeholder tab.").grid(row = 0, column = 0)
+    
+
     # Categorize the buttons into their respective tabs
     button_widgets = {attributes_tab : [click_button, pm_upgrade_button, ppc_upgrade_button, acps_upgrade_button, cc_upgrade_button, cm_upgrade_button, cba_button, autobuyer_button], 
-                    # (future) put prestige here
-                    # (future) put prestige shop here
-                    menu_tab : [placeholder_button, info_button, save_button, quit_button]}
+                      prestige_tab : [], # put prestige buttons here
+                      prestige_shop_tab : [], # put prestige shop buttons here
+                      menu_tab : [placeholder_button, info_button, save_button, quit_button]}
     
     # Use the categories of buttons to put them in their respective tabs
     for tab in button_widgets:
