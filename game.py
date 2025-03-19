@@ -8,6 +8,7 @@ import math
 import ast
 import random
 import time
+import datetime
 import platform
 
 # Return a number that is easily readable to display for the user
@@ -50,7 +51,7 @@ def pretty_to_value_with_magnitude(num):
 
     # Safely convert the significand in the list to an integer
     num[0] = safe_int(num[0])
-    
+
     # Return the number as a list
     return num
 
@@ -64,13 +65,25 @@ def safe_int(num):
     return num
 
 # Handle a click event
-def click(times = 1):
+def click(times = 1, manual = False):
+    # Access clicked_in_last_second and player_is_idle for manipulation
+    global clicked_in_last_second, player_is_idle, click_combo
+
+    # Raise clicked_in_last_second flag if the player clicked manually
+    if manual:
+        clicked_in_last_second = True
+        click_combo += times
+        if player_is_idle:
+            print("You are no longer idle.")
+            player_is_idle = False
+        update_attribute_labels()
+
     # Make empty array to record all point increments from clicks and whether or not they were critical
     clicks = [[], []]
 
     # Calculate points increment from basic and critical clicks
-    gain_from_click = save_data["ppc"] * save_data["pm"] * save_data["cm"] ** math.floor(save_data["cc"])
-    gain_from_critical = gain_from_click * save_data["cm"]
+    gain_from_click = attributes["ppc"] * attributes["pm"] * attributes["cm"] ** math.floor(attributes["cc"])
+    gain_from_critical = gain_from_click * attributes["cm"]
 
     # Populate the clicks list with point increments
     for i in range(times):
@@ -78,7 +91,7 @@ def click(times = 1):
         click = [gain_from_click, 0]
     
         # Attempt to make the click critical, multiplying by the critical multiplier and marking the click as critical if successful
-        if random.random() < save_data["cc"] % 1:
+        if random.random() < attributes["cc"] % 1:
             click[0] = gain_from_critical
             click[1] = 1
         
@@ -96,15 +109,22 @@ def click(times = 1):
     # If critical clicks were rolled, print a message to display information about them
     if gain_from_criticals > 0:
         if num_criticals == 1:
-            print(f"Tier {pretty_num(math.ceil(save_data['cc']))} Critical Click! Got {pretty_num(gain_from_criticals)} points.")
+            print(f"Tier {pretty_num(math.ceil(attributes['cc']))} Critical Click! Got {pretty_num(gain_from_criticals)} points.")
         else:
-            print(f"Got {pretty_num(gain_from_criticals)} Points from {pretty_num(num_criticals)} Tier {pretty_num(math.ceil(save_data['cc']))} Critical Clicks.")
+            print(f"Got {pretty_num(gain_from_criticals)} Points from {pretty_num(num_criticals)} Tier {pretty_num(math.ceil(attributes['cc']))} Critical Clicks.")
     
-    # Add increment to the amount of points the user has
-    save_data["points"] += increment
+    increment = prestige_data["apm"] * increment
 
-    # Update the main window to display the new points value
-    update_window()
+    if player_is_idle:
+        increment = round(increment * prestige_data["im"])
+    else:
+        increment = round(increment * (1 + prestige_data["cpm"] * click_combo))
+
+    # Add increment to the amount of points the user has
+    currency["points"] += increment
+
+    # Update attribute labels to show the new points value
+    update_attribute_labels()
 
 # Calculate the cost of an upgrade
 def calc_upgrade_cost(attribute, target_value):
@@ -115,109 +135,186 @@ def calc_upgrade_cost(attribute, target_value):
         "pm" : lambda num: math.ceil(100 * 1.25 ** ((num - 1) * 10)),
         "ppc" : lambda num: 10 * (num % 10) + 200 * min(1, math.floor(num / 10)) * 2 ** (math.floor(num / 10) - 1),
         "cc" : lambda num: math.ceil(10000 * 1.1 ** ((num - 0.01) * 100)),
-        "cm" : lambda num: round(100000 + 10000 * (num - 10) * 1.025 ** (num - 10))
+        "cm" : lambda num: round(100000 + 10000 * (num - 10) * 1.025 ** (num - 10)),
+
+        "apm" : lambda num: math.floor(2 ** ((num - 1) * 10)),
+        "ud" : lambda num: math.floor(2 ** (num * 100)),
+        "mp10acps" : lambda num: math.floor(25 ** num),
+        "aum" : lambda num: math.floor(3 ** (num - 1)),
+        "im" : lambda num: math.floor(2 ** ((num - 1) * 10)),
+        "cpm" : lambda num: math.floor(5 ** (num * 100))
     }
     
     # Return the cost for upgrading the attribute to target_value
-    return formulas[attribute](target_value)
+    return round(formulas[attribute](target_value) * (1 - prestige_data["ud"]))
 
 # Construct the display message for upgrading something
 def calc_upgrade_message(attribute, cost):
     # Define the messages for each attribute
-    messages = {
+    attribute_messages = {
         "acps" : "AutoClicks per Second",
         "pm" : "Points Multiplier",
         "ppc" : "Points per Click",
         "cc" : "Critical Click Chance",
-        "cm" : "Critical Click Multiplier",
+        "cm" : "Critical Click Multiplier"
+    }
+    prestige_messages = {
+        'apm' : 'Additional Points Multiplier',
+        'ud' : 'Upgrade Discount',
+        'mp10acps' : 'Multiplier per 10 AutoClicks per Second',
+        'aum' : 'Additional Upgrade Multiplier',
+        'im' : 'Idle Multiplier',
+        'cpm' : 'Combo Multiplier'
     }
 
-    # Construct a string with the attribute upgraded, amount of times it was upgraded, and the cost of the upgrade
-    if save_data["current_buy_amount"] == 1:
-        message = f"Upgraded {messages[attribute]} for {pretty_num(cost)} points."
+    messages = {"attribute" : attribute_messages, "prestige" : prestige_messages}
+
+    if attribute in attribute_messages:
+        message_type = "attribute"
+        points_type = "points"
     else:
-        message = f'Upgraded {messages[attribute]} {pretty_num(save_data["current_buy_amount"])} times for {pretty_num(cost)} points.'
+        message_type = "prestige"
+        points_type = "prestige points"
+
+    # Construct a string with the attribute upgraded, amount of times it was upgraded, and the cost of the upgrade
+    if buy_settings["current_buy_amount"] == 1:
+        message = f"Upgraded {messages[message_type][attribute]} for {pretty_num(cost)} {points_type}."
+    else:
+        message = f'Upgraded {messages[message_type][attribute]} {pretty_num(buy_settings["current_buy_amount"])} times for {pretty_num(cost)} {points_type}.'
 
     # Return the constructed message
     return message
 
 # Handle an upgrade event 
 def upgrade(attribute):
-    # Access the save_data list for manipulation
-    global save_data
+    # Access the attributes and currency dictionaries for manipulation
+    global attributes, prestige_data, currency
+    
+    if attribute == "ud" and round(prestige_data["ud"], 2) == 0.99:
+        print("That upgrade is already maxed out.")
+        return None
 
-    # Find the current level of the attribute and what to increment it by
-    prev_amount = save_data[attribute]
-    increment = save_data["current_buy_amount"] * increase_per_upgrade[attribute]
+    if attribute in attributes:
+        upgrade_list = attributes
+        upgrade_currency = "points"
+    elif attribute in prestige_data:
+        upgrade_list = prestige_data
+        upgrade_currency = "prestige_points"
+    
+    # Find what to increment the upgrading quantity by
+    increment = buy_settings["current_buy_amount"] * increase_per_upgrade[attribute]
 
     # Find the cost to upgrade the attribute to the target value by taking a series of the upgrades leading up to it
-    upgrade_cost = sum([calc_upgrade_cost(attribute, save_data[attribute] + i * increase_per_upgrade[attribute]) for i in range(save_data["current_buy_amount"])])
+    upgrade_cost = sum([calc_upgrade_cost(attribute, upgrade_list[attribute] + i * increase_per_upgrade[attribute]) for i in range(buy_settings["current_buy_amount"])])
 
     # If the user can afford the upgrade, go through with it
-    if upgrade_cost <= save_data["points"]:
+    if upgrade_cost <= currency[upgrade_currency]:
+        if upgrade_currency == "points":
+            upgrade_multiplier = prestige_data["aum"]
+        else:
+            upgrade_multiplier = 1
         # Add the the attribute value
-        save_data[attribute] += increment
+        upgrade_list[attribute] += increment * upgrade_multiplier
 
         # Charge the user for the upgrade(s)
-        save_data["points"] -= upgrade_cost
+        currency[upgrade_currency] -= upgrade_cost
 
         # Print the transaction information in the console
         print(calc_upgrade_message(attribute, upgrade_cost))
 
         # Update the window and display costs for upgrades
-        update_window()
-        update_display_costs()
+        update_attribute_labels()
+        update_attribute_buttons()
+        if upgrade_currency == 'prestige_points':
+            update_prestige_labels()
+            update_prestige_buttons()
     else:
         print("You can't afford that upgrade.")
 
 # Find the maximum amount of times an attribute can be upgraded
 def find_max_upgrade(attribute):
-    # Store the current value of current_buy_amount in save_data
-    current_buy_amount = save_data["current_buy_amount"]
+    # Store the current value of current_buy_amount in buy_settings
+    current_buy_amount = buy_settings["current_buy_amount"]
+
+    if attribute in attributes:
+        upgrade_list = attributes
+        upgrade_currency = "points"
+    elif attribute in prestige_data:
+        upgrade_list = prestige_data
+        upgrade_currency = "prestige_points"
+
 
     # Find the maximum amount of upgrades that the user can afford for the attribute
-    save_data["current_buy_amount"] = 0
-    while determine_cost(attribute) <= save_data["points"]:
-        save_data["current_buy_amount"] += 1
-    max_upgrade_num = save_data["current_buy_amount"] - 1
+    buy_settings["current_buy_amount"] = 0
+    while determine_cost(attribute, upgrade_list) <= currency[upgrade_currency]:
+        buy_settings["current_buy_amount"] += 1
+    max_upgrade_num = buy_settings["current_buy_amount"] - 1
 
-    # Return current_buy_amount in save_data to its original value
-    save_data["current_buy_amount"] = current_buy_amount
+    # Return current_buy_amount in buy_settings to its original value
+    buy_settings["current_buy_amount"] = current_buy_amount
 
     return max_upgrade_num
 
 # Change how many times an upgrade is purchased per button click
 def cycle_buy_amount():
-    # Access save_data list for manipulation
-    global save_data
+    # Access buy settings dictionary for manipulation
+    global buy_settings
 
     # Define the list of options for buy amount per click
     amounts = [1, 10, 25, 100, 1000]
 
-    # Update save_data with the next item in the list, wrapping around when needed
-    save_data["current_buy_amount"] = amounts[(amounts.index(save_data["current_buy_amount"]) + 1) % len(amounts)]
+    # Update buy_settings with the next item in the list, wrapping around when needed
+    buy_settings["current_buy_amount"] = amounts[(amounts.index(buy_settings["current_buy_amount"]) + 1) % len(amounts)]
 
     # Log the new current buy amount
-    print(f"New buy amount per click: {save_data['current_buy_amount']}")
+    print(f"New buy amount per click: {buy_settings['current_buy_amount']}")
 
     # Update the window and upgrade costs
-    update_window()
-    update_display_costs()
+    update_attribute_buttons()
+    update_buy_setting_buttons()
 
 # Toggle whether or not the autobuyer is on
 def toggle_autobuyer():
-    # Access save_data list for manipulation
-    global save_data
+    # Access buy_settings dictionary for manipulation
+    global buy_settings
 
     # Toggle the autobuyer on or off
-    save_data["autobuyer_state"] = not (save_data["autobuyer_state"])
+    buy_settings["autobuyer_state"] = not (buy_settings["autobuyer_state"])
 
     # Log the new state of the autobuyer
     autobuyer_states = {True : "on", False : "off"}
-    print(f"Autobuyer toggled {autobuyer_states[save_data['autobuyer_state']]}.")
+    print(f"Autobuyer toggled {autobuyer_states[buy_settings['autobuyer_state']]}.")
 
     # Update the window to display current autobuyer state
-    update_window()
+    update_buy_setting_buttons()
+
+# Find how many prestige points the player would gain from prestiging
+def find_prestige_gain():
+    return round((2 * currency["points"] / 10 ** 10) ** 0.5)
+
+# Prestige the player
+def prestige_player():
+    # Access relevant save data for resetting during prestige
+    global currency, attributes, buy_settings, player_data
+
+    # If the user can afford to prestige, reset their attributes and add to their prestige points
+    if currency["points"] >= (10 ** 10):
+        print(f"Prestiged for {pretty_num(find_prestige_gain())} prestige points.")
+
+
+        new_prestige_points = currency['prestige_points'] + find_prestige_gain()
+        currency = {'points' : 0, 'prestige_points' : new_prestige_points}
+        attributes = {'ppc': 1, 'pm': 1, 'acps': 0, 'cc': 0.01, 'cm': 10}
+        buy_settings = {'current_buy_amount': 1, 'autobuyer_state': False}
+
+        current_time = datetime.datetime.now()
+        player_data['last_prestige_date'] = f"{current_time.month}/{current_time.day}/{current_time.year}"
+        
+        update_prestige_labels()
+        update_attribute_labels()
+    # If the user can't afford to prestige, tell them
+    else:
+        print("You cannot yet afford to prestige.")
 
 # Create a window to display information about the game mechanics
 def display_info():
@@ -254,20 +351,52 @@ def display_info():
     font_size = math.ceil(min(window_width, window_height) / 34)
     info_font = ("TkDefaultFont", font_size)
 
-    # Create labels explaining the game mechanics
-    pm_info = ttk.Label(info_window, wraplength = window_width, text = f'When clicking, the the Extra Points% is added to the increment (e.g. If you get 10 points after crit and have 130% extra points you would get 23 points from that click).\n', font = info_font)
-    ppc_info = ttk.Label(info_window, wraplength = window_width, text = f'Points per click is the base amount of points you get per click.\n', font = info_font)
-    acps_info = ttk.Label(info_window, wraplength = window_width, text = f'Autoclicks per second is the amount of times the game automatically clicks for you every second.\n', font = info_font)
-    cc_info = ttk.Label(info_window, wraplength = window_width, text = f'Critical chance is the chance of landing a critical click. For values higher than 1, every critical click is guaranteed to multiply the points by critical_multiplier ^ floor(critical_chance), and has a critical_chance % 1 probability of multiplying the points value by critical_multiplier again.\n', font = info_font)
-    cm_info = ttk.Label(info_window, wraplength = window_width, text = f'Critical multiplier is how much the points per click is multiplied with upon landing a critical hit.\n', font = info_font)
-    cba_info = ttk.Label(info_window, wraplength = window_width, text = f'Cycling the buy amount allows you to buy more than one of an upgrade at a time.\n', font = info_font)
-    autobuyer_info = ttk.Label(info_window, wraplength = window_width, text = f'The autobuyer will automatically buy upgrades when you can afford them.\n', font = info_font)
-    placeholder_info = ttk.Label(info_window, wraplength = window_width, text = f'Placeholder description.', font = info_font)
+    info_tabs = ttk.Notebook(info_window)
 
-    # Pack the labels into the window
-    objects = (pm_info, ppc_info, acps_info, cc_info, cm_info, cba_info, autobuyer_info, placeholder_info)
-    for info in objects:
-        info.pack()
+    attributes_tab = ttk.Frame(info_tabs)
+    prestige_tab = ttk.Frame(info_tabs)
+
+    tab_descriptions = {
+        attributes_tab : "Attributes",
+        prestige_tab : "Prestige Upgrades"
+    }
+
+    for tab in tab_descriptions:
+        info_tabs.add(tab, text = tab_descriptions[tab])
+
+    # Create labels explaining the attribute mechanics
+    pm_info = ttk.Label(attributes_tab, wraplength = window_width, text = 'PM: When clicking, the the Extra Points% is added to the increment (e.g. If you get 10 points after crit and have 130% extra points you would get 23 points from that click).\n', font = info_font)
+    ppc_info = ttk.Label(attributes_tab, wraplength = window_width, text = 'PpC: Points per click is the base amount of points you get per click.\n', font = info_font)
+    acps_info = ttk.Label(attributes_tab, wraplength = window_width, text = 'aCpS: Autoclicks per second is the amount of times the game automatically clicks for you every second.\n', font = info_font)
+    cc_info = ttk.Label(attributes_tab, wraplength = window_width, text = 'CC: Critical chance is the chance of landing a critical click. For values higher than 1, every critical click is guaranteed to multiply the points by critical_multiplier ^ floor(critical_chance), and has a critical_chance % 1 probability of multiplying the points value by critical_multiplier again.\n', font = info_font)
+    cm_info = ttk.Label(attributes_tab, wraplength = window_width, text = 'CM: Critical multiplier is how much the points per click is multiplied with upon landing a critical hit.\n', font = info_font)
+    cba_info = ttk.Label(attributes_tab, wraplength = window_width, text = 'CBA: Cycling the buy amount allows you to buy more than one of an upgrade at a time.\n', font = info_font)
+    autobuyer_info = ttk.Label(attributes_tab, wraplength = window_width, text = 'AB: The autobuyer will automatically buy upgrades when you can afford them.\n', font = info_font)
+
+
+    # Create labels explaining prestige attribute mechanics
+    apm_info = ttk.Label(prestige_tab, wraplength = window_width, text = 'aPm: Additional points multiplier is an additional multiplier applied to the points you gain.\n', font = info_font)
+    ud_info = ttk.Label(prestige_tab, wraplength = window_width, text = 'UD: Upgrade discounts are removed from prices of attribute upgrades.\n', font = info_font)
+    mp10acps_info = ttk.Label(prestige_tab, wraplength = window_width, text = 'Mp10aCpS: Multiplier per 10 autoclicks per second is applied the clicks per second of each "autoclicker" for every 10 that you buy.\n', font = info_font)
+    aum_info = ttk.Label(prestige_tab, wraplength = window_width, text = 'aUm: Additional upgrades multiplier gives you a "2 for the price of 1" deal for upgrades where the 2 is instead your AUM.\n', font = info_font)
+    im_info = ttk.Label(prestige_tab, wraplength = window_width, text = 'IM: The points you earn are multiplied by this number while idle (no manual clicks in last 60 seconds).\n', font = info_font)
+    cm_info = ttk.Label(prestige_tab, wraplength = window_width, text = 'CPM :The points you earn are multiplied by this number and and your current click combo, which resets when you go idle.\n', font = info_font)
+
+    tabs = {
+        attributes_tab : [pm_info, ppc_info, acps_info, cc_info, cm_info, cba_info, autobuyer_info],
+        prestige_tab : [apm_info, ud_info, mp10acps_info, aum_info, im_info, cm_info]
+    }
+
+    # Pack the labels into tabs
+    for tab in tabs:
+
+        for info in tabs[tab]:
+            info.pack()
+    
+    info_tabs.grid(row = 0, column = 0, sticky = 'nsew')
+
+    info_window.grid_rowconfigure(0, weight = 1)
+    info_window.grid_columnconfigure(0, weight = 1)
 
     # Start the mainloop for the window
     info_window.mainloop()
@@ -282,7 +411,16 @@ def save():
     # Open the save file in the assets folder
     save_file = open('assets/save', 'w', encoding = "utf-8")
 
-    # Write the current save_data to the file
+    # Compile all save data categories back into one dictionary
+    save_data = {
+        "currency" : currency, 
+        "attributes" : attributes, 
+        "buy_settings" : buy_settings, 
+        "prestige" : prestige_data, 
+        "player_data" : player_data
+    }
+
+    # Write the current attributes to the file
     save_file.write(str(save_data))
     
     # Close the file
@@ -294,7 +432,7 @@ def save():
 # Handle the user closing the game
 def quit_game():
     # Record when the game was closed
-    save_data['last_play_time'] = time.time()
+    player_data['last_play_time'] = time.time()
 
     # Save the game to a file
     save()
@@ -306,8 +444,11 @@ def quit_game():
 def create_window():
     # Make labels, buttons, and font global so other functions can manipulate them
     global points_text, pm_text, ppc_text, acps_text, cc_text, cm_text, eppc_text, pps_text
+    global click_button, pm_upgrade_button, ppc_upgrade_button, acps_upgrade_button, cc_upgrade_button, cm_upgrade_button
     global cba_button, autobuyer_button
-    global pm_upgrade_button, ppc_upgrade_button, acps_upgrade_button, cc_upgrade_button, cm_upgrade_button
+    global prestige_text, prestige_button
+    global ppoints_text, lp_text, apm_text, ud_text, mp10acps_text, aum_text, im_text, cpm_text
+    global apm_upgrade_button, ud_upgrade_button, mp10acps_upgrade_button, aum_upgrade_button, im_upgrade_button, cpm_upgrade_button
     global text_style
 
     # Initialize the game window
@@ -343,7 +484,7 @@ def create_window():
     text_style.configure("TButton", font=("TkDefaultFont", 12))
 
     # Define how many rows and columns the window should have
-    game_window_rows = 9
+    game_window_rows = 10
     game_window_columns = 2
         
     # Set a weight for each row and column
@@ -352,26 +493,12 @@ def create_window():
     for i in range(game_window_columns):
         game_window.grid_columnconfigure(i, weight = 1)
 
-    # Initialize labels for the window
-    points_text = ttk.Label(game_window, text = f'')
-    pm_text = ttk.Label(game_window, text = f'')
-    ppc_text = ttk.Label(game_window, text = f'')
-    acps_text = ttk.Label(game_window, text = f'')
-    cc_text = ttk.Label(game_window, text = f'')
-    cm_text = ttk.Label(game_window, text = f'')
-    eppc_text = ttk.Label(game_window, text = f'')
-    pps_text = ttk.Label(game_window, text = f'')
-
-    # Add the labels to the window
-    text_widgets = [points_text, pm_text, ppc_text, acps_text, cc_text, cm_text, eppc_text, pps_text]
-    for widget in text_widgets:
-        widget.grid(row = math.floor(text_widgets.index(widget) / game_window_columns), column = text_widgets.index(widget) % game_window_columns, sticky = 'nsew')
-    
     # Initialize notebook to store buttons in tabs
     game_tabs = ttk.Notebook(game_window)
 
     # Initialize the tabs in the notebook
     attributes_tab = ttk.Frame(game_tabs)
+    buy_settings_tab = ttk.Frame(game_tabs)
     prestige_tab = ttk.Frame(game_tabs)
     prestige_shop_tab = ttk.Frame(game_tabs)
     menu_tab = ttk.Frame(game_tabs)
@@ -379,6 +506,7 @@ def create_window():
     # Define display text for the tabs
     tabs_display_text = {
         attributes_tab : "Attributes",
+        buy_settings_tab : "Attribute Purchase Settings",
         prestige_tab : "Prestige",
         prestige_shop_tab : "Prestige Shop",
         menu_tab : "Menu"
@@ -387,50 +515,85 @@ def create_window():
     # Add the tabs to the notebook with their display text
     for tab in tabs_display_text:
         game_tabs.add(tab, text = tabs_display_text[tab])
+
+    # Initialize labels for the window
+    points_text = ttk.Label(attributes_tab)
+    pm_text = ttk.Label(attributes_tab)
+    ppc_text = ttk.Label(attributes_tab)
+    acps_text = ttk.Label(attributes_tab)
+    cc_text = ttk.Label(attributes_tab)
+    cm_text = ttk.Label(attributes_tab)
+    eppc_text = ttk.Label(attributes_tab)
+    pps_text = ttk.Label(attributes_tab)    
     
+    prestige_text = ttk.Label(prestige_tab, wraplength = game_window.winfo_width(), text = 'Prestige will reset your points and attributes, but will give prestige points, which can be spent for persistent upgrades in the prestige shop. Prestiging requires 1e10 points, but the more points you have when you prestige, the more prestige points you gain from doing so.')
+    
+    ppoints_text = ttk.Label(prestige_shop_tab)
+    lp_text = ttk.Label(prestige_shop_tab)
+    apm_text = ttk.Label(prestige_shop_tab)
+    ud_text = ttk.Label(prestige_shop_tab)
+    mp10acps_text = ttk.Label(prestige_shop_tab)
+    aum_text = ttk.Label(prestige_shop_tab)
+    im_text = ttk.Label(prestige_shop_tab)
+    cpm_text = ttk.Label(prestige_shop_tab)
+    
+
     # Initialize buttons for the window
-    click_button = ttk.Button(attributes_tab, text = "Click", command = click)
-    pm_upgrade_button = ttk.Button(attributes_tab, text = f'', command = lambda: upgrade("pm"))
-    ppc_upgrade_button = ttk.Button(attributes_tab, text = f'', command = lambda: upgrade("ppc"))
-    acps_upgrade_button  = ttk.Button(attributes_tab, text = f'', command = lambda: upgrade("acps"))
-    cc_upgrade_button  = ttk.Button(attributes_tab, text = f'', command = lambda: upgrade("cc"))
-    cm_upgrade_button  = ttk.Button(attributes_tab, text = f'', command = lambda: upgrade("cm"))
-    cba_button  = ttk.Button(attributes_tab, text = f'', command = cycle_buy_amount)
-    autobuyer_button  = ttk.Button(attributes_tab, text = f'', command = toggle_autobuyer)
-    placeholder_button = ttk.Button(menu_tab, text = f'Placeholder', command = placeholder_function)
+    click_button = ttk.Button(attributes_tab, text = '', command = lambda : click(times = 1, manual = True))
+    pm_upgrade_button = ttk.Button(attributes_tab)
+    ppc_upgrade_button = ttk.Button(attributes_tab)
+    acps_upgrade_button  = ttk.Button(attributes_tab)
+    cc_upgrade_button  = ttk.Button(attributes_tab)
+    cm_upgrade_button  = ttk.Button(attributes_tab)
+    
+    cba_button  = ttk.Button(buy_settings_tab)
+    autobuyer_button  = ttk.Button(buy_settings_tab)
+    
+    prestige_button = ttk.Button(prestige_tab)
+    
+    apm_upgrade_button = ttk.Button(prestige_shop_tab)
+    ud_upgrade_button = ttk.Button(prestige_shop_tab)
+    mp10acps_upgrade_button = ttk.Button(prestige_shop_tab)
+    aum_upgrade_button = ttk.Button(prestige_shop_tab)
+    im_upgrade_button = ttk.Button(prestige_shop_tab)
+    cpm_upgrade_button = ttk.Button(prestige_shop_tab)
+    
+    placeholder_button = ttk.Button(menu_tab, text = 'Placeholder', command = placeholder_function)
     info_button  = ttk.Button(menu_tab, text = 'Info', command = display_info)
     save_button  = ttk.Button(menu_tab, text = "Save", command = save)
     quit_button  = ttk.Button(menu_tab, text = "Quit", command = quit_game)
-    
-    # Calculate the amount of window rows that were used by labels
-    text_rows = math.ceil(len(text_widgets) / game_window_columns)
-
-    # Placeholder labels for unused tabs
-    ttk.Label(prestige_tab, text = "There is not yet a prestige system, this is a placeholder tab.").grid(row = 0, column = 0)
-    ttk.Label(prestige_shop_tab, text = "There is not yet a prestige shop, this is a placeholder tab.").grid(row = 0, column = 0)
-    
 
     # Categorize the buttons into their respective tabs
-    button_widgets = {attributes_tab : [click_button, pm_upgrade_button, ppc_upgrade_button, acps_upgrade_button, cc_upgrade_button, cm_upgrade_button, cba_button, autobuyer_button], 
-                      prestige_tab : [], # put prestige buttons here
-                      prestige_shop_tab : [], # put prestige shop buttons here
-                      menu_tab : [placeholder_button, info_button, save_button, quit_button]}
+    widgets = {
+        attributes_tab : [points_text, pm_text, ppc_text, acps_text, cc_text, cm_text, eppc_text, pps_text, click_button, pm_upgrade_button, ppc_upgrade_button, acps_upgrade_button, cc_upgrade_button, cm_upgrade_button], 
+        buy_settings_tab : [autobuyer_button, cba_button], # put autobuyer buttons here
+        prestige_tab : [prestige_text, prestige_button], # put prestige buttons here
+        prestige_shop_tab : [ppoints_text, lp_text, apm_text, ud_text, mp10acps_text, aum_text, im_text, cpm_text, apm_upgrade_button, ud_upgrade_button, mp10acps_upgrade_button, aum_upgrade_button, im_upgrade_button, cpm_upgrade_button], # put prestige shop buttons here
+        menu_tab : [placeholder_button, info_button, save_button, quit_button]
+    }
     
-    # Use the categories of buttons to put them in their respective tabs
-    for tab in button_widgets:
-        for widget in button_widgets[tab]:
-            widget.grid(row = math.floor(button_widgets[tab].index(widget) / game_window_columns), column = button_widgets[tab].index(widget) % game_window_columns, sticky = 'nsew')
+    # Use the categories of buttons to put them in their respective tabs and weight each row/column in each tab
+    for tab in widgets:
+        if tab == prestige_tab:
+            for widget in widgets[tab]: 
+                widget.grid(row = widgets[tab].index(widget), column = 0, sticky = 'nsew')
 
-    # Set weights for each row and column in each tab
-    for tab in tabs_display_text:
-        if tab in button_widgets:
-            for i in range(math.floor(len(button_widgets[tab]) / game_window_columns)):
+                for i in range(2):
+                    tab.grid_rowconfigure(i, weight = 1)
+                for i in range(1):
+                    tab.grid_columnconfigure(i, weight = 1)
+
+        else:
+            for widget in widgets[tab]:
+                widget.grid(row = math.floor(widgets[tab].index(widget) / game_window_columns), column = widgets[tab].index(widget) % game_window_columns, sticky = 'nsew')
+
+            for i in range(math.ceil(len(widgets[tab]) / game_window_columns)):
                 tab.grid_rowconfigure(i, weight = 1)
             for i in range(game_window_columns):
                 tab.grid_columnconfigure(i, weight = 1)
 
     # Put the notebook of tabs into the window
-    game_tabs.grid(row = text_rows, column = 0, rowspan = game_window_rows - text_rows, columnspan = game_window_columns, sticky = "nsew")
+    game_tabs.grid(row = 0, column = 0, rowspan = game_window_rows, columnspan = game_window_columns, sticky = "nsew")
 
     # Bind running quit game to when the window manager closes the window
     game_window.protocol("WM_DELETE_WINDOW", quit_game)
@@ -441,44 +604,107 @@ def create_window():
     # Return the constructed window
     return game_window
 
-# Update text labels and some buttons
-def update_window():
+# Update text labels for attributes
+def update_attribute_labels():
     # Recalculate point gain expected per click
-    expected_points_per_click = round(save_data["ppc"] * save_data["pm"] * save_data["cm"] ** math.floor(save_data["cc"]) * ((1 - save_data["cc"] % 1) + save_data["cm"] * (save_data["cc"] % 1)))
+    if player_is_idle:
+        ci_multiplier = prestige_data["im"]
+    else:
+        ci_multiplier = 1 + prestige_data["cpm"] * click_combo
+    expected_points_per_click = round(ci_multiplier * prestige_data["apm"] * attributes["ppc"] * attributes["pm"] * attributes["cm"] ** math.floor(attributes["cc"]) * ((1 - attributes["cc"] % 1) + attributes["cm"] * (attributes["cc"] % 1)))
 
-    # Configure all labels to show current values from save_data
-    points_text.config(text = f'Points: {pretty_num(round(save_data["points"]))}')
-    pm_text.config(text = f'Extra Points: {pretty_num(round((save_data["pm"] - 1) * 100))}%')
-    ppc_text.config(text = f'Points Per Click: {pretty_num(save_data["ppc"])}')
-    acps_text.config(text = f'AutoClicks Per Second: {pretty_num(save_data["acps"])}')
-    cc_text.config(text = f'Critical Chance: {pretty_num(round(save_data["cc"] * 100))}%')
-    cm_text.config(text = f'Critical Multiplier: {pretty_num(save_data["cm"])}x')
+    # Configure all labels to show current values from attributes
+    points_text.config(text = f'Points: {pretty_num(round(currency["points"]))}')
+    pm_text.config(text = f'Extra Points: {pretty_num(round((attributes["pm"] - 1) * 100))}%')
+    ppc_text.config(text = f'Points Per Click: {pretty_num(attributes["ppc"])}')
+    acps_text.config(text = f'AutoClicks Per Second: {pretty_num(attributes["acps"])}')
+    cc_text.config(text = f'Critical Chance: {pretty_num(round(attributes["cc"] * 100))}%')
+    cm_text.config(text = f'Critical Multiplier: {pretty_num(attributes["cm"])}x')
     eppc_text.config(text = f'Expected Points Per Click: {pretty_num(expected_points_per_click)}')
     pps_text.config(text = f'Points Per Second: {pretty_num(round(points_per_second))}')
 
-    # Configure cycle buy amount button text to display current value from save_data
-    cba_button.config(text = f'Cycle Buy Amount (Current: {save_data["current_buy_amount"]})', command = cycle_buy_amount)
+    # Update prestige button
+    prestige_button.config(text = f"Prestige (Will Gain {pretty_num(find_prestige_gain())} Prestige Points)", command = prestige_player)
 
-    # Configure autobuyer button to display current state from save_data
-    autobuyer_states = {False: "Off", True: "On"}
-    autobuyer_button.config(text = f'Toggle Autobuyer (State: {autobuyer_states[save_data["autobuyer_state"]]})', command = toggle_autobuyer)
+    # Update click button to display combo
+    if player_is_idle:
+        combo_state = "Idle"
+    else:
+        combo_state = f"Combo: {click_combo}"
 
-# Update upgrade buttons to display current costs
-def update_display_costs():
+    click_button.config(text = f'Click ({combo_state})', command = lambda : click(times = 1, manual = True))
+
+# Update button text for attributes
+def update_attribute_buttons():
     # Access and update next_upgrade_costs 
     global next_upgrade_costs
-    next_upgrade_costs = {attribute: determine_cost(attribute) for attribute in attributes}
+    next_upgrade_costs = {attribute : determine_cost(attribute, attributes) for attribute in attributes}
 
 
-    # Define list of buttons used for upgrades
-    upgrade_buttons = [ppc_upgrade_button, pm_upgrade_button, acps_upgrade_button, cc_upgrade_button, cm_upgrade_button]
+    # Associate upgrade buttons with their respective attributes
+    upgrade_buttons = {
+        ppc_upgrade_button : "ppc", 
+        pm_upgrade_button : "pm", 
+        acps_upgrade_button : "acps", 
+        cc_upgrade_button : "cc", 
+        cm_upgrade_button : "cm"
+    }
 
     # Define list of abbreviations for each attribute to put on upgrade buttons
-    upgrade_names = ["PpC", "EP", "aCpS", "CC", "CM"]
+    upgrade_names = {
+        ppc_upgrade_button : "PpC", 
+        pm_upgrade_button : "EP", 
+        acps_upgrade_button : "aCpS", 
+        cc_upgrade_button : "CC", 
+        cm_upgrade_button : "CM"
+    }
 
     # Update each upgrade button with names and costs
-    for i in range(len(upgrade_buttons)):
-        upgrade_buttons[i].config(text = f'Upgrade {upgrade_names[i]} (Cost: {pretty_num(next_upgrade_costs[attributes[i]])})', command = lambda to_upgrade = attributes[i]: upgrade(to_upgrade))
+    for button in upgrade_buttons:
+        button.config(text = f'Upgrade {upgrade_names[button]} (Cost: {pretty_num(next_upgrade_costs[upgrade_buttons[button]])})', command = lambda to_upgrade = upgrade_buttons[button] : upgrade(to_upgrade))
+
+#  Update button text for buy settings
+def update_buy_setting_buttons():
+    # Configure cycle buy amount button text to display current value from attributes
+    cba_button.config(text = f'Cycle Buy Amount (Current: {buy_settings["current_buy_amount"]})', command = cycle_buy_amount)
+
+    # Configure autobuyer button to display current state from attributes
+    autobuyer_states = {False: "Off", True: "On"}
+    autobuyer_button.config(text = f'Toggle Autobuyer (State: {autobuyer_states[buy_settings["autobuyer_state"]]})', command = toggle_autobuyer)
+
+def update_prestige_labels():
+    ppoints_text.config(text = f'Prestige Points: {pretty_num(currency["prestige_points"])}')
+    lp_text.config(text = f'Last prestige: {player_data["last_prestige_date"]}')
+    apm_text.config(text = f'Additional Points Multiplier: +{pretty_num(round((prestige_data["apm"] - 1) * 100))}%')
+    ud_text.config(text = f'Upgrade Discount: {pretty_num(round(prestige_data["ud"] * 100))}%')
+    mp10acps_text.config(text = f'Multiplier per 10 aCpS: {pretty_num(prestige_data["mp10acps"])}')
+    aum_text.config(text = f'Additional Upgrades per Upgrade: {pretty_num(prestige_data["aum"] - 1)}')
+    im_text.config(text = f'Idle Multiplier: +{pretty_num(round((prestige_data["im"] - 1) * 100))}%')
+    cpm_text.config(text = f'Combo Points Multiplier: +{pretty_num(round(prestige_data["cpm"] * 100))}%')
+
+def update_prestige_buttons():
+    prestige_upgrade_costs = {prestige_attribute : determine_cost(prestige_attribute, prestige_data) for prestige_attribute in prestige_data}
+
+    prestige_upgrade_buttons = {
+        apm_upgrade_button : 'apm',
+        ud_upgrade_button : 'ud',
+        mp10acps_upgrade_button : 'mp10acps',
+        aum_upgrade_button : 'aum',
+        im_upgrade_button : 'im',
+        cpm_upgrade_button : 'cpm'
+    }
+
+    prestige_upgrade_names = {
+        apm_upgrade_button : 'aPm',
+        ud_upgrade_button : 'UD',
+        mp10acps_upgrade_button : 'Mp10aCpS',
+        aum_upgrade_button : 'aUm',
+        im_upgrade_button : 'IM',
+        cpm_upgrade_button : 'CPM'
+    }
+
+    for button in prestige_upgrade_buttons:
+        button.config(text = f'Upgrade {prestige_upgrade_names[button]} (Cost: {pretty_num(prestige_upgrade_costs[prestige_upgrade_buttons[button]])})', command = lambda to_upgrade = prestige_upgrade_buttons[button] : upgrade(to_upgrade))
 
 # Adjust the font size for the game window
 def adjust_font_size():
@@ -494,24 +720,26 @@ def adjust_font_size():
     text_style.configure("TLabel", font = new_font)
     text_style.configure("TButton", font = new_font)
 
+    # Update text wrap of prestige text
+    prestige_text.config(wraplength = window.winfo_width(), text = 'Prestige will reset your points and attributes, but will give prestige points, which can be spent for persistent upgrades in the prestige shop. Prestiging requires 1e10 points, but the more points you have when you prestige, the more prestige points you gain from doing so.')
+
 # Manage recurring timed events
 def game_loop():
-    # Access prev_points and points_per_second for manipulation
-    global prev_points, points_per_second
+    # Access variables for manipulation
+    global prev_points, points_per_second, clicks_in_last_minute, clicked_in_last_second, player_is_idle, click_combo
 
     # Click autoclicks per second times
-    click(save_data["acps"])
+    click(attributes["acps"] * prestige_data["mp10acps"] ** math.floor(attributes["acps"] / 10))
 
 
     # Calculate how many points were gained/lossed in the last second
-    points_per_second = save_data["points"] - prev_points
+    points_per_second = currency["points"] - prev_points
 
     # Update prev_points for next points_per_second calculation
-    prev_points = save_data["points"]
-
+    prev_points = currency["points"]
 
     # If the autobuyer is active, upgrade each attribute as many times as possible
-    if save_data["autobuyer_state"]:
+    if buy_settings["autobuyer_state"]:
         # Initialize if any attributes can be upgraded
         can_upgrade = False
         
@@ -526,8 +754,8 @@ def game_loop():
         
         # If anything can be upgraded, activate the autobuyer
         if can_upgrade:
-            # Store the current state of current_buy_amount in save_data
-            current_buy_amount = save_data["current_buy_amount"]
+            # Store the current state of current_buy_amount in attributes
+            current_buy_amount = buy_settings["current_buy_amount"]
 
             # Indicate that the following purchases are products of the autobuyer
             print("\nAutobuyer: ")
@@ -539,18 +767,36 @@ def game_loop():
 
                 # If the attribute can be upgraded, do so
                 if max_upgrade > 0:
-                    save_data["current_buy_amount"] = max_upgrade
+                    buy_settings["current_buy_amount"] = max_upgrade
                     upgrade(attribute)
             
             # Visually seperate autobuyer purchases from everything else
             print()
 
-            # Revert current_buy_amount in save_data to the previous quantity
-            save_data["current_buy_amount"] = current_buy_amount
+            # Revert current_buy_amount in buy_settings to the previous quantity
+            buy_settings["current_buy_amount"] = current_buy_amount
 
             # Update the game window
-            update_display_costs()
-            update_window()
+            update_attribute_labels()
+            update_attribute_buttons()
+
+    # Record whether or not the user clicked in the last second
+    if clicked_in_last_second:
+        clicks_in_last_minute.append(1)
+        clicked_in_last_second = False
+    else:
+        clicks_in_last_minute.append(0)
+
+    # If the list details more than 60 seconds, remove the first second
+    if len(clicks_in_last_minute) > 60:
+                clicks_in_last_minute.pop(0)
+
+    # If the player has not clicked manually in the last 60 seconds, mark them as idle
+    if not (player_is_idle or 1 in clicks_in_last_minute):
+        print("You are now idle.")
+        player_is_idle = True
+        click_combo = 0
+        update_attribute_labels()
 
     # Call game_loop again after 1 second
     window.after(1000, game_loop)
@@ -574,23 +820,34 @@ if os.path.exists('assets/save'):
     # Access the save file and read save data from it
     with open('assets/save', 'r', encoding = "utf-8") as save_file:
         save_data = ast.literal_eval(save_file.read())
-
-    # Calculate how many points the user gained while offline, notify the user, and give them the points
-    expected_points_per_click = save_data["ppc"] * save_data["pm"] * save_data["cm"] ** math.floor(save_data["cc"]) * ((1 - save_data["cc"] % 1) + save_data["cm"] * (save_data["cc"] % 1))
-    offline_points = round((time.time() - save_data["last_play_time"]) * save_data["acps"] * expected_points_per_click)
-    print(f"Gained {pretty_num(offline_points)} points while offline.")
-    save_data["points"] += offline_points
+        currency = save_data["currency"]
+        attributes = save_data["attributes"]
+        buy_settings = save_data["buy_settings"]
+        prestige_data = save_data["prestige"]
+        player_data = save_data["player_data"]
 else:
     # Create a save file
     save_file = open('assets/save', 'x', encoding = "utf-8")
     save_file.close()
 
     # Create new save data
+    currency = {'points' : 0, 'prestige_points' : 0}
     # ppc = Points per click, pm = Points multiplier, acps = Autoclicks per second, cc = Critical chance, cm = Critical multiplier
-    save_data = {'points': 0, 'ppc': 1, 'pm': 1, 'acps': 0, 'cc': 0.01, 'cm': 10, 'current_buy_amount': 1, 'autobuyer_state': False, 'last_play_time': time.time()}
+    attributes = {'ppc': 1, 'pm': 1, 'acps': 0, 'cc': 0.01, 'cm': 10}
+    buy_settings = {'current_buy_amount': 1, 'autobuyer_state': False}
+    # apm = Additional points multiplier, ud = Upgrade discount, mp10acps = Multiplier per 10 autoclicks per second, aum = Attribute upgrade multiplier, im = Idle multiplier, cm = Combo multiplier
+    prestige_data = {'apm' : 1, 'ud' : 0, 'mp10acps' : 1, 'aum' : 1, 'im' : 1, 'cpm' : 0}
+    player_data = {'last_play_time' : time.time(), 'last_prestige_date' : "N/A"}
 
-# Define attributes that can be upgraded and prioritize them for the autobuyer
-attributes = ['ppc', 'pm', 'acps', 'cc', 'cm']
+# Calculate how many points the user gained while offline, notify the user, and give them the points
+expected_points_per_click = prestige_data["im"] * prestige_data["apm"] * attributes["ppc"] * attributes["pm"] * attributes["cm"] ** math.floor(attributes["cc"]) * ((1 - attributes["cc"] % 1) + attributes["cm"] * (attributes["cc"] % 1))
+offline_points = round((time.time() - player_data["last_play_time"]) * attributes["acps"] * prestige_data["mp10acps"] ** math.floor(attributes["acps"] / 10) * expected_points_per_click)
+if offline_points > 0:
+    print(f"Gained {pretty_num(offline_points)} points while offline.")
+    currency["points"] += offline_points
+
+
+# Prioritize attributes for the autobuyer
 auto_upgrade_priority = ['acps', 'cc', 'cm', 'ppc', 'pm']
 
 # Define how much each attribute should be incremented by per upgrade
@@ -600,19 +857,35 @@ increase_per_upgrade = {
     "ppc" : 1,
     "cc" : 0.01,
     "cm" : 2,
+
+    "apm" : 0.1,
+    "ud" : 0.01,
+    "mp10acps" : 1,
+    "aum" : 1,
+    "im" : 0.1,
+    "cpm" : 0.01
 }
 
 # Define function to more consisely find the cost of upgrading a specific attribute a certain amount of times and use it to calculate costs for every attribute
-determine_cost = lambda cost_type : sum([calc_upgrade_cost(cost_type, save_data[cost_type] + i * increase_per_upgrade[cost_type]) for i in range(save_data["current_buy_amount"])])
-next_upgrade_costs = {attribute: determine_cost(attribute) for attribute in attributes}
+determine_cost = lambda cost_type, attribute_list : sum([calc_upgrade_cost(cost_type, attribute_list[cost_type] + i * increase_per_upgrade[cost_type]) for i in range(buy_settings["current_buy_amount"])])
+next_upgrade_costs = {attribute: determine_cost(attribute, attributes) for attribute in attributes}
 
 # Initialize values used in the game_loop function
-prev_points = save_data["points"]
+prev_points = currency["points"]
 points_per_second = 0
 
-# Create the window and initialize display costs for upgrades
+# Initialize information about if the player is idle
+clicks_in_last_minute = []
+clicked_in_last_second = False
+player_is_idle = True
+click_combo = 0
+
+# Create the window and initialize display values
 window = create_window()
-update_display_costs()
+update_attribute_buttons()
+update_buy_setting_buttons()
+update_prestige_buttons()
+update_prestige_labels()
 
 # Start the game loop
 game_loop()
