@@ -5,6 +5,8 @@ from tkinter import ttk
 # Import other relevant modules
 import os
 import math
+import numpy
+from decimal import Decimal
 import ast
 import random
 import time
@@ -15,14 +17,17 @@ import platform
 def pretty_num(num):
     # Safely convert the number to an integer
     num = safe_int(num)
+    num = Decimal(num)
 
     # If the number is not that long, just add commas
-    if len(str(math.floor(num))) < 6:
+    if len(str(Decimal(math.floor(num)))) < 6:
         num = f'{num:,}'
 
     # If the number is too long, convert it to scientific notation
     else:
-        magnitude = math.floor(math.log10(abs(num)))
+        str_num = str(num).split(".")[0]
+        magnitude = len(str_num) - 1
+
         principle = safe_int(round(num / (10 ** magnitude), 3))
 
         if principle == 10:
@@ -64,10 +69,15 @@ def safe_int(num):
     # Return the processed number
     return num
 
+def newlines(num = 4):
+    print("".join(["\n" for i in range(num)]))
+
 # Handle a click event
 def click(times = 1, manual = False):
     # Access clicked_in_last_second and player_is_idle for manipulation
     global clicked_in_last_second, player_is_idle, click_combo
+    
+    times = int(times)
 
     # Raise clicked_in_last_second flag if the player clicked manually
     if manual:
@@ -78,33 +88,24 @@ def click(times = 1, manual = False):
             player_is_idle = False
         update_attribute_labels()
 
-    # Make empty array to record all point increments from clicks and whether or not they were critical
-    clicks = [[], []]
-
     # Calculate points increment from basic and critical clicks
     gain_from_click = attributes["ppc"] * attributes["pm"] * attributes["cm"] ** math.floor(attributes["cc"])
     gain_from_critical = gain_from_click * attributes["cm"]
 
-    # Populate the clicks list with point increments
-    for i in range(times):
-        # Generate a basic click
-        click = [gain_from_click, 0]
-    
-        # Attempt to make the click critical, multiplying by the critical multiplier and marking the click as critical if successful
-        if random.random() < attributes["cc"] % 1:
-            click[0] = gain_from_critical
-            click[1] = 1
-        
-        # Append click and whether it was critical to clicks
-        clicks[0].append(click[0])
-        clicks[1].append(click[1])
-    
+    if player_is_idle:
+        gain_from_click *= prestige_data["im"]
+    else:
+        gain_from_click *= 1 + prestige_data["cpm"] * click_combo
+
+    num_criticals = Decimal(numpy.random.binomial(n = times, p = attributes["cc"] % 1))
+
+    num_normals = times - num_criticals
+
     # Calculate the total increment to add to the amount of points
-    increment = round(sum(clicks[0]))
+    increment = num_normals * gain_from_click + num_criticals * gain_from_critical
 
     # Calculate how number of criticals and points increment from them
-    num_criticals = sum([1 for item in clicks[1] if (item == 1)])
-    gain_from_criticals = round(gain_from_critical * num_criticals)
+    gain_from_criticals = round(num_criticals * gain_from_critical)
 
     # If critical clicks were rolled, print a message to display information about them
     if gain_from_criticals > 0:
@@ -113,15 +114,10 @@ def click(times = 1, manual = False):
         else:
             print(f"Got {pretty_num(gain_from_criticals)} Points from {pretty_num(num_criticals)} Tier {pretty_num(math.ceil(attributes['cc']))} Critical Clicks.")
     
-    increment = prestige_data["apm"] * increment
-
-    if player_is_idle:
-        increment = round(increment * prestige_data["im"])
-    else:
-        increment = round(increment * (1 + prestige_data["cpm"] * click_combo))
+    increment *= prestige_data["apm"]
 
     # Add increment to the amount of points the user has
-    currency["points"] += increment
+    currency["points"] += round(increment)
 
     # Update attribute labels to show the new points value
     update_attribute_labels()
@@ -129,24 +125,32 @@ def click(times = 1, manual = False):
 # Calculate the cost of an upgrade
 def calc_upgrade_cost(attribute, target_value):
 
+    target_value = Decimal(target_value)
+
     # Define functions to return the cost of upgrading an attribute to num level(s)
     formulas = {
-        "acps" : lambda num: round(1000 * 1.5 ** num),
-        "pm" : lambda num: math.ceil(100 * 1.25 ** ((num - 1) * 10)),
-        "ppc" : lambda num: 10 * (num % 10) + 200 * min(1, math.floor(num / 10)) * 2 ** (math.floor(num / 10) - 1),
-        "cc" : lambda num: math.ceil(10000 * 1.1 ** ((num - 0.01) * 100)),
-        "cm" : lambda num: round(100000 + 10000 * (num - 10) * 1.025 ** (num - 10)),
+        "acps" : lambda num: round(1000 * Decimal('1.5') ** num),
+        "pm" : lambda num: math.ceil(100 * Decimal('1.25') ** ((num - 1) * 10)),
+        "ppc" : lambda num: 10 * (num % 10) + 200 * min(1, math.floor(num / 10)) * 2 ** Decimal(math.floor(num / 10) - 1),
+        "cc" : lambda num: math.ceil(10000 * Decimal('1.1') ** ((num - Decimal('0.01')) * 100)),
+        "cm" : lambda num: round(100000 + 10000 * (num - 10) * Decimal('1.025') ** (num - 10)),
 
         "apm" : lambda num: math.floor(2 ** ((num - 1) * 10)),
         "ud" : lambda num: math.floor(2 ** (num * 100)),
-        "mp10acps" : lambda num: math.floor(25 ** num),
-        "aum" : lambda num: math.floor(3 ** (num - 1)),
+        "mp10acps" : lambda num: math.floor(1 * 1000000 ** (num - 1)),
+        "aum" : lambda num: math.floor(1 * 1000000 ** (num - 1)),
         "im" : lambda num: math.floor(2 ** ((num - 1) * 10)),
-        "cpm" : lambda num: math.floor(5 ** (num * 100))
+        "cpm" : lambda num: math.floor(10 ** (num * 100))
     }
     
+    if attribute in attributes:
+        cost_multi = 1 - prestige_data["ud"]
+    else:
+        cost_multi = 1
+
     # Return the cost for upgrading the attribute to target_value
-    return round(formulas[attribute](target_value) * (1 - prestige_data["ud"]))
+    return round(formulas[attribute](target_value) * cost_multi)
+
 
 # Construct the display message for upgrading something
 def calc_upgrade_message(attribute, cost):
@@ -190,7 +194,7 @@ def upgrade(attribute):
     # Access the attributes and currency dictionaries for manipulation
     global attributes, prestige_data, currency
     
-    if attribute == "ud" and round(prestige_data["ud"], 2) == 0.99:
+    if attribute == "ud" and round(prestige_data["ud"], 2) >= 0.99:
         print("That upgrade is already maxed out.")
         return None
 
@@ -202,7 +206,7 @@ def upgrade(attribute):
         upgrade_currency = "prestige_points"
     
     # Find what to increment the upgrading quantity by
-    increment = buy_settings["current_buy_amount"] * increase_per_upgrade[attribute]
+    increment = increase_per_upgrade[attribute] * buy_settings["current_buy_amount"]
 
     # Find the cost to upgrade the attribute to the target value by taking a series of the upgrades leading up to it
     upgrade_cost = sum([calc_upgrade_cost(attribute, upgrade_list[attribute] + i * increase_per_upgrade[attribute]) for i in range(buy_settings["current_buy_amount"])])
@@ -261,7 +265,7 @@ def cycle_buy_amount():
     global buy_settings
 
     # Define the list of options for buy amount per click
-    amounts = [1, 10, 25, 100, 1000]
+    amounts = [1, 10, 25, 100, 250]
 
     # Update buy_settings with the next item in the list, wrapping around when needed
     buy_settings["current_buy_amount"] = amounts[(amounts.index(buy_settings["current_buy_amount"]) + 1) % len(amounts)]
@@ -272,6 +276,7 @@ def cycle_buy_amount():
     # Update the window and upgrade costs
     update_attribute_buttons()
     update_buy_setting_buttons()
+    update_prestige_buttons()
 
 # Toggle whether or not the autobuyer is on
 def toggle_autobuyer():
@@ -290,7 +295,7 @@ def toggle_autobuyer():
 
 # Find how many prestige points the player would gain from prestiging
 def find_prestige_gain():
-    return round((2 * currency["points"] / 10 ** 10) ** 0.5)
+    return round((2 * Decimal(currency["points"]) / 10 ** 10) ** Decimal('0.5'))
 
 # Prestige the player
 def prestige_player():
@@ -303,15 +308,16 @@ def prestige_player():
 
 
         new_prestige_points = currency['prestige_points'] + find_prestige_gain()
-        currency = {'points' : 0, 'prestige_points' : new_prestige_points}
-        attributes = {'ppc': 1, 'pm': 1, 'acps': 0, 'cc': 0.01, 'cm': 10}
+        currency = {'points' : Decimal(0), 'prestige_points' : new_prestige_points}
+        attributes = {'ppc': 1, 'pm': Decimal(1), 'acps': 0, 'cc': Decimal('0.01'), 'cm': 10}
         buy_settings = {'current_buy_amount': 1, 'autobuyer_state': False}
 
         current_time = datetime.datetime.now()
-        player_data['last_prestige_date'] = f"{current_time.month}/{current_time.day}/{current_time.year}"
+        player_data['last_prestige_date'] = f"{current_time.month}/{current_time.day}/{current_time.year}, {current_time.hour}:{current_time.minute}"
         
         update_prestige_labels()
         update_attribute_labels()
+        update_attribute_buttons()
     # If the user can't afford to prestige, tell them
     else:
         print("You cannot yet afford to prestige.")
@@ -402,23 +408,37 @@ def display_info():
     info_window.mainloop()
 
 # Placeholder function for placeholder button
-def placeholder_function():
-    # Indicate that the function has been called
-    print("placeholder_function")
+def update_all_visuals():
+    update_attribute_buttons()
+    update_attribute_labels()
+    update_buy_setting_buttons()
+    update_prestige_buttons()
+    update_prestige_labels()
+
+    print("updated all buttons and labels")
 
 # Save the game state to a file for persistence through runs of the code
 def save():
+    print("Saving... ", end = "")
     # Open the save file in the assets folder
     save_file = open('assets/save', 'w', encoding = "utf-8")
 
     # Compile all save data categories back into one dictionary
     save_data = {
-        "currency" : currency, 
-        "attributes" : attributes, 
-        "buy_settings" : buy_settings, 
-        "prestige" : prestige_data, 
-        "player_data" : player_data
+        "currency" : currency.copy(), 
+        "attributes" : attributes.copy(), 
+        "buy_settings" : buy_settings.copy(), 
+        "prestige" : prestige_data.copy(), 
+        "player_data" : player_data.copy()
     }
+
+    
+
+    for data_type in save_data:
+        for data_point in save_data[data_type]:
+            if data_point in ["last_prestige_date", "autobuyer_state", "current_buy_amount"]:
+                continue
+            save_data[data_type][data_point] = str(save_data[data_type][data_point])
 
     # Write the current attributes to the file
     save_file.write(str(save_data))
@@ -429,16 +449,62 @@ def save():
     # Alert the user that the game was saved
     print("Game saved.")
 
+def create_save():
+    # Create new save data
+    currency = {'points' : 0, 'prestige_points' : 0}
+    # ppc = Points per click, pm = Points multiplier, acps = Autoclicks per second, cc = Critical chance, cm = Critical multiplier
+    attributes = {'ppc': 1, 'pm': Decimal(1), 'acps': 0, 'cc': Decimal('0.01'), 'cm': 10}
+    buy_settings = {'current_buy_amount': 1, 'autobuyer_state': False}
+    # apm = Additional points multiplier, ud = Upgrade discount, mp10acps = Multiplier per 10 autoclicks per second, aum = Attribute upgrade multiplier, im = Idle multiplier, cm = Combo multiplier
+    prestige_data = {'apm' : Decimal(1), 'ud' : Decimal(0), 'mp10acps' : 1, 'aum' : 1, 'im' : Decimal(1), 'cpm' : Decimal(0)}
+    player_data = {'last_play_time' : Decimal(time.time()), 'last_prestige_date' : "N/A"}
+
+    return currency, attributes, buy_settings, prestige_data, player_data
+
+def load_save():
+    try:
+        print("Loading save data... ", end = "")
+        
+        # Access the save file and read save data from it
+        with open('assets/save', 'r', encoding = "utf-8") as save_file:
+            save_data = ast.literal_eval(save_file.read())
+
+        for data_type in save_data:
+            for data_point in save_data[data_type]:
+                if data_point in ["last_prestige_date", "autobuyer_state", "current_buy_amount"]:
+                    continue
+                save_data[data_type][data_point] = Decimal(save_data[data_type][data_point])
+
+
+
+        currency = save_data["currency"]
+        attributes = save_data["attributes"]
+        buy_settings = save_data["buy_settings"]
+        prestige_data = save_data["prestige"]
+        player_data = save_data["player_data"]
+
+        print("Done.")
+
+        return currency, attributes, buy_settings, prestige_data, player_data
+    except SyntaxError:
+        newlines()
+        print("The save data is invalid. Either delete assets/save or revert it to the default format, then reload the game.")
+        input("Press enter to continue...")
+        exit()
+
+
 # Handle the user closing the game
 def quit_game():
     # Record when the game was closed
-    player_data['last_play_time'] = time.time()
+    player_data['last_play_time'] = Decimal(time.time())
 
     # Save the game to a file
     save()
 
     # Stop all code
     exit()
+
+
 
 # Create the game window and return it
 def create_window():
@@ -558,7 +624,7 @@ def create_window():
     im_upgrade_button = ttk.Button(prestige_shop_tab)
     cpm_upgrade_button = ttk.Button(prestige_shop_tab)
     
-    placeholder_button = ttk.Button(menu_tab, text = 'Placeholder', command = placeholder_function)
+    placeholder_button = ttk.Button(menu_tab, text = 'Update Visuals (debug)', command = update_all_visuals)
     info_button  = ttk.Button(menu_tab, text = 'Info', command = display_info)
     save_button  = ttk.Button(menu_tab, text = "Save", command = save)
     quit_button  = ttk.Button(menu_tab, text = "Quit", command = quit_game)
@@ -614,14 +680,14 @@ def update_attribute_labels():
     expected_points_per_click = round(ci_multiplier * prestige_data["apm"] * attributes["ppc"] * attributes["pm"] * attributes["cm"] ** math.floor(attributes["cc"]) * ((1 - attributes["cc"] % 1) + attributes["cm"] * (attributes["cc"] % 1)))
 
     # Configure all labels to show current values from attributes
-    points_text.config(text = f'Points: {pretty_num(round(currency["points"]))}')
-    pm_text.config(text = f'Extra Points: {pretty_num(round((attributes["pm"] - 1) * 100))}%')
+    points_text.config(text = f'Points: {pretty_num(currency["points"])}')
+    pm_text.config(text = f'Extra Points: {pretty_num((attributes["pm"] - 1) * 100)}%')
     ppc_text.config(text = f'Points Per Click: {pretty_num(attributes["ppc"])}')
     acps_text.config(text = f'AutoClicks Per Second: {pretty_num(attributes["acps"])}')
-    cc_text.config(text = f'Critical Chance: {pretty_num(round(attributes["cc"] * 100))}%')
+    cc_text.config(text = f'Critical Chance: {pretty_num(attributes["cc"] * 100)}%')
     cm_text.config(text = f'Critical Multiplier: {pretty_num(attributes["cm"])}x')
     eppc_text.config(text = f'Expected Points Per Click: {pretty_num(expected_points_per_click)}')
-    pps_text.config(text = f'Points Per Second: {pretty_num(round(points_per_second))}')
+    pps_text.config(text = f'Points Per Second: {pretty_num(points_per_second)}')
 
     # Update prestige button
     prestige_button.config(text = f"Prestige (Will Gain {pretty_num(find_prestige_gain())} Prestige Points)", command = prestige_player)
@@ -675,12 +741,12 @@ def update_buy_setting_buttons():
 def update_prestige_labels():
     ppoints_text.config(text = f'Prestige Points: {pretty_num(currency["prestige_points"])}')
     lp_text.config(text = f'Last prestige: {player_data["last_prestige_date"]}')
-    apm_text.config(text = f'Additional Points Multiplier: +{pretty_num(round((prestige_data["apm"] - 1) * 100))}%')
-    ud_text.config(text = f'Upgrade Discount: {pretty_num(round(prestige_data["ud"] * 100))}%')
+    apm_text.config(text = f'Additional Points Multiplier: +{pretty_num((prestige_data["apm"] - 1) * 100)}%')
+    ud_text.config(text = f'Upgrade Discount: {pretty_num(prestige_data["ud"] * 100)}%')
     mp10acps_text.config(text = f'Multiplier per 10 aCpS: {pretty_num(prestige_data["mp10acps"])}')
     aum_text.config(text = f'Additional Upgrades per Upgrade: {pretty_num(prestige_data["aum"] - 1)}')
-    im_text.config(text = f'Idle Multiplier: +{pretty_num(round((prestige_data["im"] - 1) * 100))}%')
-    cpm_text.config(text = f'Combo Points Multiplier: +{pretty_num(round(prestige_data["cpm"] * 100))}%')
+    im_text.config(text = f'Idle Multiplier: +{pretty_num((prestige_data["im"] - 1) * 100)}%')
+    cpm_text.config(text = f'Combo Points Multiplier: +{pretty_num(prestige_data["cpm"] * 100)}%')
 
 def update_prestige_buttons():
     prestige_upgrade_costs = {prestige_attribute : determine_cost(prestige_attribute, prestige_data) for prestige_attribute in prestige_data}
@@ -723,172 +789,210 @@ def adjust_font_size():
     # Update text wrap of prestige text
     prestige_text.config(wraplength = window.winfo_width(), text = 'Prestige will reset your points and attributes, but will give prestige points, which can be spent for persistent upgrades in the prestige shop. Prestiging requires 1e10 points, but the more points you have when you prestige, the more prestige points you gain from doing so.')
 
+def beat_game():
+    global window, currency, attributes, buy_settings, prestige_data, player_data
+    
+    try:
+        window.destroy()
+    except NameError:
+        pass
+
+    save()
+
+    if user_os in clear_commands:
+        os.system(clear_commands[user_os])
+
+    while True:
+        newlines()
+        print("You have somehow created an OverFlow error and in doing so, beaten the game.")
+
+        create_new_save = input("Would you like to create a new save (y/n): ").strip().lower()
+        if create_new_save in ["y", "n"]:
+            break
+        if user_os in clear_commands:
+            os.system(clear_commands[user_os])
+    
+    if create_new_save == "y":
+        currency, attributes, buy_settings, prestige_data, player_data = create_save()
+        save()
+        update_all_visuals()
+        print("New save created.")
+    else:
+        print("In that case, goodbye.")
+        if user_os == "Windows":
+            os.system("pause")
+        exit()
+
 # Manage recurring timed events
 def game_loop():
-    # Access variables for manipulation
-    global prev_points, points_per_second, clicks_in_last_minute, clicked_in_last_second, player_is_idle, click_combo
+    try:
+        # Access variables for manipulation
+        global prev_points, points_per_second, clicks_in_last_minute, clicked_in_last_second, player_is_idle, click_combo
 
-    # Click autoclicks per second times
-    click(attributes["acps"] * prestige_data["mp10acps"] ** math.floor(attributes["acps"] / 10))
+        # Click autoclicks per second times
+        click(attributes["acps"] * max(1, prestige_data["mp10acps"] * math.floor(attributes["acps"] / 10)))
 
 
-    # Calculate how many points were gained/lossed in the last second
-    points_per_second = currency["points"] - prev_points
+        # Calculate how many points were gained/lossed in the last second
+        points_per_second = currency["points"] - prev_points
 
-    # Update prev_points for next points_per_second calculation
-    prev_points = currency["points"]
+        # Update prev_points for next points_per_second calculation
+        prev_points = currency["points"]
 
-    # If the autobuyer is active, upgrade each attribute as many times as possible
-    if buy_settings["autobuyer_state"]:
-        # Initialize if any attributes can be upgraded
-        can_upgrade = False
-        
-        # Find amount of times each attribute could be upgraded with current points
-        upgrade_nums = [find_max_upgrade(attribute) for attribute in attributes]
-        
-        # If anything can be upgraded, set can_upgrade to true
-        for item in upgrade_nums:
-            if item > 0:
-                can_upgrade = True
-                break
-        
-        # If anything can be upgraded, activate the autobuyer
-        if can_upgrade:
-            # Store the current state of current_buy_amount in attributes
-            current_buy_amount = buy_settings["current_buy_amount"]
-
-            # Indicate that the following purchases are products of the autobuyer
-            print("\nAutobuyer: ")
+        # If the autobuyer is active, upgrade each attribute as many times as possible
+        if buy_settings["autobuyer_state"]:
+            # Initialize if any attributes can be upgraded
+            can_upgrade = False
             
-            # Upgrade each attribute in order of auto_upgrade_priority
-            for attribute in auto_upgrade_priority:
-                # Find the maximum amount of times the attribute can be upgraded
-                max_upgrade = find_max_upgrade(attribute)
-
-                # If the attribute can be upgraded, do so
-                if max_upgrade > 0:
-                    buy_settings["current_buy_amount"] = max_upgrade
-                    upgrade(attribute)
+            # Find amount of times each attribute could be upgraded with current points
+            upgrade_nums = [find_max_upgrade(attribute) for attribute in attributes]
             
-            # Visually seperate autobuyer purchases from everything else
-            print()
+            # If anything can be upgraded, set can_upgrade to true
+            for item in upgrade_nums:
+                if item > 0:
+                    can_upgrade = True
+                    break
+            
+            # If anything can be upgraded, activate the autobuyer
+            if can_upgrade:
+                # Store the current state of current_buy_amount in attributes
+                current_buy_amount = buy_settings["current_buy_amount"]
 
-            # Revert current_buy_amount in buy_settings to the previous quantity
-            buy_settings["current_buy_amount"] = current_buy_amount
+                # Indicate that the following purchases are products of the autobuyer
+                print("\nAutobuyer: ")
+                
+                # Upgrade each attribute in order of auto_upgrade_priority
+                for attribute in auto_upgrade_priority:
+                    # Find the maximum amount of times the attribute can be upgraded
+                    max_upgrade = find_max_upgrade(attribute)
 
-            # Update the game window
+                    # If the attribute can be upgraded, do so
+                    if max_upgrade > 0:
+                        buy_settings["current_buy_amount"] = max_upgrade
+                        upgrade(attribute)
+                
+                # Visually seperate autobuyer purchases from everything else
+                print()
+
+                # Revert current_buy_amount in buy_settings to the previous quantity
+                buy_settings["current_buy_amount"] = current_buy_amount
+
+                # Update the game window
+                update_attribute_labels()
+                update_attribute_buttons()
+
+        # Record whether or not the user clicked in the last second
+        if clicked_in_last_second:
+            clicks_in_last_minute.append(1)
+            clicked_in_last_second = False
+        else:
+            clicks_in_last_minute.append(0)
+
+        # If the list details more than 60 seconds, remove the first second
+        if len(clicks_in_last_minute) > 60:
+                    clicks_in_last_minute.pop(0)
+
+        # If the player has not clicked manually in the last 60 seconds, mark them as idle
+        if not (player_is_idle or 1 in clicks_in_last_minute):
+            print("You are now idle.")
+            player_is_idle = True
+            click_combo = 0
             update_attribute_labels()
-            update_attribute_buttons()
 
-    # Record whether or not the user clicked in the last second
-    if clicked_in_last_second:
-        clicks_in_last_minute.append(1)
-        clicked_in_last_second = False
+        # Call game_loop again after 1 second
+        window.after(1000, game_loop)
+
+    except OverflowError:
+        beat_game()
+
+try:
+
+    # Define clear commands native to the big three operating systems
+    clear_commands = {
+        "Windows" : "cls",
+        "Darwin" : "clear",
+        "Linux" : "clear"
+    }
+
+    # Fetch the user's operating system
+    user_os = platform.system()
+
+    if user_os in clear_commands:
+        os.system(clear_commands[user_os])
+
+    # If a save file exists, access it, else make one
+    if os.path.exists('assets/save'):
+        save_get = load_save
     else:
-        clicks_in_last_minute.append(0)
+        # Create a save file
+        save_file = open('assets/save', 'x', encoding = "utf-8")
+        save_file.close()
 
-    # If the list details more than 60 seconds, remove the first second
-    if len(clicks_in_last_minute) > 60:
-                clicks_in_last_minute.pop(0)
+        # Create new save data
+        save_get = create_save
 
-    # If the player has not clicked manually in the last 60 seconds, mark them as idle
-    if not (player_is_idle or 1 in clicks_in_last_minute):
-        print("You are now idle.")
-        player_is_idle = True
-        click_combo = 0
-        update_attribute_labels()
+    currency, attributes, buy_settings, prestige_data, player_data = save_get()
 
-    # Call game_loop again after 1 second
-    window.after(1000, game_loop)
+    print("Starting game... ", end = "", flush = True)
 
-# Define clear commands native to the big three operating systems
-clear_commands = {
-    "Windows" : "cls",
-    "Darwin" : "clear",
-    "Linux" : "clear"
-}
+    # Prioritize attributes for the autobuyer
+    auto_upgrade_priority = ['acps', 'cc', 'cm', 'ppc', 'pm']
 
-# Fetch the user's operating system
-user_os = platform.system()
+    # Define how much each attribute should be incremented by per upgrade
+    increase_per_upgrade = {
+        "acps" : 1,
+        "pm" : Decimal('0.1'),
+        "ppc" : 1,
+        "cc" : Decimal('0.01'),
+        "cm" : 2,
 
-# If the clear command for it is known, clear the console
-if user_os in clear_commands:
-    os.system(clear_commands[user_os])
-
-# If a save file exists, access it, else make one
-if os.path.exists('assets/save'):
-    # Access the save file and read save data from it
-    with open('assets/save', 'r', encoding = "utf-8") as save_file:
-        save_data = ast.literal_eval(save_file.read())
-        currency = save_data["currency"]
-        attributes = save_data["attributes"]
-        buy_settings = save_data["buy_settings"]
-        prestige_data = save_data["prestige"]
-        player_data = save_data["player_data"]
-else:
-    # Create a save file
-    save_file = open('assets/save', 'x', encoding = "utf-8")
-    save_file.close()
-
-    # Create new save data
-    currency = {'points' : 0, 'prestige_points' : 0}
-    # ppc = Points per click, pm = Points multiplier, acps = Autoclicks per second, cc = Critical chance, cm = Critical multiplier
-    attributes = {'ppc': 1, 'pm': 1, 'acps': 0, 'cc': 0.01, 'cm': 10}
-    buy_settings = {'current_buy_amount': 1, 'autobuyer_state': False}
-    # apm = Additional points multiplier, ud = Upgrade discount, mp10acps = Multiplier per 10 autoclicks per second, aum = Attribute upgrade multiplier, im = Idle multiplier, cm = Combo multiplier
-    prestige_data = {'apm' : 1, 'ud' : 0, 'mp10acps' : 1, 'aum' : 1, 'im' : 1, 'cpm' : 0}
-    player_data = {'last_play_time' : time.time(), 'last_prestige_date' : "N/A"}
-
-# Calculate how many points the user gained while offline, notify the user, and give them the points
-expected_points_per_click = prestige_data["im"] * prestige_data["apm"] * attributes["ppc"] * attributes["pm"] * attributes["cm"] ** math.floor(attributes["cc"]) * ((1 - attributes["cc"] % 1) + attributes["cm"] * (attributes["cc"] % 1))
-offline_points = round((time.time() - player_data["last_play_time"]) * attributes["acps"] * prestige_data["mp10acps"] ** math.floor(attributes["acps"] / 10) * expected_points_per_click)
-if offline_points > 0:
-    print(f"Gained {pretty_num(offline_points)} points while offline.")
-    currency["points"] += offline_points
+        "apm" : Decimal('0.1'),
+        "ud" : Decimal('0.01'),
+        "mp10acps" : Decimal('0.5'),
+        "aum" : 1,
+        "im" : Decimal('0.1'),
+        "cpm" : Decimal('0.01')
+    }
 
 
-# Prioritize attributes for the autobuyer
-auto_upgrade_priority = ['acps', 'cc', 'cm', 'ppc', 'pm']
+    # Define function to more consisely find the cost of upgrading a specific attribute a certain amount of times and use it to calculate costs for every attribute
+    determine_cost = lambda cost_type, attribute_list : sum([calc_upgrade_cost(cost_type, attribute_list[cost_type] + i * increase_per_upgrade[cost_type]) for i in range(buy_settings["current_buy_amount"])])
+    next_upgrade_costs = {attribute: determine_cost(attribute, attributes) for attribute in attributes}
 
-# Define how much each attribute should be incremented by per upgrade
-increase_per_upgrade = {
-    "acps" : 1,
-    "pm" : 0.1,
-    "ppc" : 1,
-    "cc" : 0.01,
-    "cm" : 2,
+    # Initialize values used in the game_loop function
+    prev_points = currency["points"]
+    points_per_second = 0
 
-    "apm" : 0.1,
-    "ud" : 0.01,
-    "mp10acps" : 1,
-    "aum" : 1,
-    "im" : 0.1,
-    "cpm" : 0.01
-}
+    # Initialize information about if the player is idle
+    clicks_in_last_minute = []
+    clicked_in_last_second = False
+    player_is_idle = True
+    click_combo = 0
 
-# Define function to more consisely find the cost of upgrading a specific attribute a certain amount of times and use it to calculate costs for every attribute
-determine_cost = lambda cost_type, attribute_list : sum([calc_upgrade_cost(cost_type, attribute_list[cost_type] + i * increase_per_upgrade[cost_type]) for i in range(buy_settings["current_buy_amount"])])
-next_upgrade_costs = {attribute: determine_cost(attribute, attributes) for attribute in attributes}
+    # Create the window and initialize display values
+    window = create_window()
+    update_attribute_buttons()
+    update_buy_setting_buttons()
+    update_prestige_buttons()
+    update_prestige_labels()
 
-# Initialize values used in the game_loop function
-prev_points = currency["points"]
-points_per_second = 0
+    print("Done.")
 
-# Initialize information about if the player is idle
-clicks_in_last_minute = []
-clicked_in_last_second = False
-player_is_idle = True
-click_combo = 0
+    # Calculate how many points the user gained while offline, notify the user, and give them the points
+    expected_points_per_click = prestige_data["im"] * prestige_data["apm"] * attributes["ppc"] * attributes["pm"] * attributes["cm"] ** math.floor(attributes["cc"]) * ((1 - attributes["cc"] % 1) + attributes["cm"] * (attributes["cc"] % 1))
+    offline_points = round((Decimal(time.time()) - player_data["last_play_time"]) * attributes["acps"] * max(1, prestige_data["mp10acps"] * math.floor(attributes["acps"] / 10)) * expected_points_per_click)
+    if offline_points > 0:
+        print(f"Gained {pretty_num(offline_points)} points while offline.")
+        currency["points"] += offline_points
 
-# Create the window and initialize display values
-window = create_window()
-update_attribute_buttons()
-update_buy_setting_buttons()
-update_prestige_buttons()
-update_prestige_labels()
 
-# Start the game loop
-game_loop()
+    # Start the game loop
+    game_loop()
 
-# Create the game window
-window.mainloop()
+    # Create the game window
+    window.mainloop()
+
+
+
+except OverflowError:
+    beat_game()
