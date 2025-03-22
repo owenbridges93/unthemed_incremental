@@ -350,12 +350,29 @@ def display_info():
 
     # Access a window icon and set it for this window
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    icon_path = os.path.join(script_dir, "assets/media/info.ico")
+
+    icon = '' if player_data['color_scheme'] == 'default' else '_dark_mode'
+
+    icon_path = os.path.join(script_dir, f"assets/media/info{icon}.ico")
     info_window.iconbitmap(icon_path)
 
     # Set a font for this window
     font_size = math.ceil(min(window_width, window_height) / 34)
     info_font = ("TkDefaultFont", font_size)
+
+    info_window_style = ttk.Style(info_window)
+
+    info_window_style.theme_use('alt')
+
+    bg_color, fg_color, active_color = scheme_colors[player_data['color_scheme']]
+
+    widget_types = ["TLabel", "TFrame", "TNotebook"]
+    for widget_type in widget_types:
+        info_window_style.configure(widget_type, background = bg_color, foreground = fg_color)
+
+    info_window_style.configure("TNotebook.Tab", background = bg_color, foreground = fg_color)
+    info_window_style.map("TNotebook.Tab", foreground = [('selected', fg_color)], background = [('selected', active_color)])
+
 
     info_tabs = ttk.Notebook(info_window)
 
@@ -407,22 +424,20 @@ def display_info():
     # Start the mainloop for the window
     info_window.mainloop()
 
-def dark_mode(switch = False):
+def scheme_change(switch = False):
     global player_data
 
     if switch:
-        player_data["dark_mode"] = not player_data["dark_mode"]
-
-    mode_icons = {True : "_dark_mode", False : ""}
+        player_data["color_scheme"] = themes[(themes.index(player_data["color_scheme"]) + 1) % len(themes)]
 
     # Access a window icon and set it for the window
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    icon_path = os.path.join(script_dir, f"assets/media/game{mode_icons[player_data['dark_mode']]}.ico")
+    icon_path = os.path.join(script_dir, f"assets/media/game{'' if player_data['color_scheme'] == 'defualt' else '_dark_mode'}.ico")
     window.iconbitmap(icon_path)
 
+    bg_color, fg_color, active_color = scheme_colors[player_data['color_scheme']]
+    
     widget_types = ["TLabel", "TFrame", "TButton", "TNotebook"]
-    bg_color, fg_color, active_color = ["#100000", "#c60000", "#400000"] if player_data["dark_mode"] else ["lightgrey", "#000000", "#cccccc"]
-
     for widget_type in widget_types:
         game_window_style.configure(widget_type, background = bg_color, foreground = fg_color)
 
@@ -431,18 +446,14 @@ def dark_mode(switch = False):
     game_window_style.configure("TNotebook.Tab", background = bg_color, foreground = fg_color)
     game_window_style.map("TNotebook.Tab", foreground = [('selected', fg_color)], background = [('selected', active_color)])
 
-    window.configure(bg = bg_color)
-
-    modes_display_values = {True : "Dark", False : "Light"}
-    mode_display = modes_display_values[player_data['dark_mode']]
     
-    dark_mode_button.config(text = f"Mode: {mode_display}", command = lambda : dark_mode(True))
+    color_scheme_button.config(text = f"Scheme: {player_data['color_scheme']}", command = lambda : scheme_change(True))
 
     if switch:
-        print(f"Switched to {mode_display.lower()} mode.")
+        print(f"Switched color scheme to {player_data['color_scheme']}.")
 
     if player_data["easter_egg"]:
-        icon_path = os.path.join(script_dir, f"assets/media/game_dark_mode_glowing.ico")
+        icon_path = os.path.join(script_dir, f"assets/media/game_you_lose.ico")
         window.iconbitmap(icon_path)
     
 # Placeholder function for placeholder button
@@ -452,7 +463,7 @@ def update_all_visuals():
     update_buy_setting_buttons()
     update_prestige_buttons()
     update_prestige_labels()
-    dark_mode()
+    scheme_change()
 
 # Save the game state to a file for persistence through runs of the code
 def save():
@@ -473,7 +484,7 @@ def save():
 
     for data_type in save_data:
         for data_point in save_data[data_type]:
-            if data_point in ["last_prestige_date", "autobuyer_state", "current_buy_amount", "dark_mode", "easter_egg"]:
+            if data_point in ["last_prestige_date", "autobuyer_state", "current_buy_amount", "color_scheme", "easter_egg"]:
                 continue
             save_data[data_type][data_point] = str(save_data[data_type][data_point])
 
@@ -494,7 +505,7 @@ def create_save():
     buy_settings = {'current_buy_amount': 1, 'autobuyer_state': False}
     # apm = Additional points multiplier, ud = Upgrade discount, mp10acps = Multiplier per 10 autoclicks per second, aum = Attribute upgrade multiplier, im = Idle multiplier, cm = Combo multiplier
     prestige_data = {'apm' : Decimal(1), 'ud' : Decimal(0), 'mp10acps' : 1, 'aum' : 1, 'im' : Decimal(1), 'cpm' : Decimal(0)}
-    player_data = {'dark_mode' : False,'last_play_time' : Decimal(time.time()), 'last_prestige_date' : "N/A", 'easter_egg' : False}
+    player_data = {'color_scheme' : 'default','last_play_time' : Decimal(time.time()), 'last_prestige_date' : "N/A", 'easter_egg' : False}
 
     return currency, attributes, buy_settings, prestige_data, player_data
 
@@ -508,7 +519,7 @@ def load_save():
 
         for data_type in save_data:
             for data_point in save_data[data_type]:
-                if data_point in ["last_prestige_date", "autobuyer_state", "current_buy_amount", "dark_mode", "easter_egg"]:
+                if data_point in ["last_prestige_date", "autobuyer_state", "current_buy_amount", "color_scheme", "easter_egg"]:
                     continue
                 save_data[data_type][data_point] = Decimal(save_data[data_type][data_point])
 
@@ -557,7 +568,7 @@ def create_window():
     global prestige_text, prestige_button
     global ppoints_text, lp_text, apm_text, ud_text, mp10acps_text, aum_text, im_text, cpm_text
     global apm_upgrade_button, ud_upgrade_button, mp10acps_upgrade_button, aum_upgrade_button, im_upgrade_button, cpm_upgrade_button
-    global dark_mode_button
+    global color_scheme_button
     global game_window_style
 
     # Initialize the game window
@@ -670,7 +681,7 @@ def create_window():
     im_upgrade_button = ttk.Button(prestige_shop_tab)
     cpm_upgrade_button = ttk.Button(prestige_shop_tab)
     
-    dark_mode_button = ttk.Button(menu_tab)
+    color_scheme_button = ttk.Button(menu_tab)
     info_button  = ttk.Button(menu_tab, text = 'Info', command = display_info)
     save_button  = ttk.Button(menu_tab, text = "Save", command = save)
     quit_button  = ttk.Button(menu_tab, text = "Quit", command = quit_game)
@@ -681,7 +692,7 @@ def create_window():
         buy_settings_tab : [autobuyer_button, cba_button], # put autobuyer buttons here
         prestige_tab : [prestige_text, prestige_button], # put prestige buttons here
         prestige_shop_tab : [ppoints_text, lp_text, apm_text, ud_text, mp10acps_text, aum_text, im_text, cpm_text, apm_upgrade_button, ud_upgrade_button, mp10acps_upgrade_button, aum_upgrade_button, im_upgrade_button, cpm_upgrade_button], # put prestige shop buttons here
-        menu_tab : [dark_mode_button, info_button, save_button, quit_button]
+        menu_tab : [color_scheme_button, info_button, save_button, quit_button]
     }
     
     # Use the categories of buttons to put them in their respective tabs and weight each row/column in each tab
@@ -1016,6 +1027,30 @@ try:
     clicked_in_last_second = False
     player_is_idle = True
     click_combo = 0
+
+    scheme_colors = {
+        'default' : ["lightgrey", "#000000", "#b9b9b9"],
+        'night' : ["#00002b", "#320261", "#210051"],
+        'console' : ["#100000", "#c60000", "#400000"],
+        'runestone' : ["#181416", "#c60000", "#400000"],
+        'bulletproof' : ["#2f2f1b", "#cdd6fc", "#654f0a"],
+        'jade' : ["#253c67", "#5be585", "#0090a1"],
+        'eye' : ["#06412b", "#75ba5f", "#146d4d"],
+        'orion' : ["#382d8f", "#c41847", "#5a3883"],
+        'afton' : ["#5b408b", "#da9b82", "#9d5e85"],
+        'pompones' : ["#736390", "#b0a9e5", "#a471c0"],
+        'aquamarine' : ["#74a7b2", "#7cf9d6", "#8faff2"],
+        'cyber-angel' : ["#4093c1", "#acf0fb", "#9fd5e8"],
+        'skyblue' : ["#50b8e7", "#dcf0fa", "#84cdee"],
+        'soft-red' : ["#e5a3a3", "#fbc3b0", "#ff9b9b"],
+        'kind' : ["#ebbbbb", "#beeeee", "#bacccc"],
+        'orange' : ["#ff5d00", "#ffadad", "#ff8028"],
+        'sunset' : ["#ffb684", "#ffdfd2", "#fff1ab"],
+        'lonely' : ["#6d88e1", "#ecedb1", "#83d8db"]
+        # name : [background, foreground, action]
+        # '' : ["#000000", "#000000", "#000000"]
+    }
+    themes = list(scheme_colors.keys())
 
     # Create the window and initialize display values
     window = create_window()
