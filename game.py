@@ -428,11 +428,11 @@ def scheme_change(switch = False):
     global player_data
 
     if switch:
-        player_data["color_scheme"] = themes[(themes.index(player_data["color_scheme"]) + 1) % len(themes)]
+        player_data["color_scheme"] = schemes[(schemes.index(player_data["color_scheme"]) + 1) % len(schemes)]
 
     # Access a window icon and set it for the window
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    icon_path = os.path.join(script_dir, f"assets/media/game{'' if player_data['color_scheme'] == 'defualt' else '_dark_mode'}.ico")
+    icon_path = os.path.join(script_dir, f"assets/media/game{'' if (schemes.index(player_data['color_scheme']) - 1 >= len(schemes) / 2 or player_data['color_scheme'] == 'default') else '_dark_mode'}.ico")
     window.iconbitmap(icon_path)
 
     bg_color, fg_color, active_color = scheme_colors[player_data['color_scheme']]
@@ -1048,9 +1048,9 @@ try:
         'sunset' : ["#ffb684", "#ffdfd2", "#fff1ab"],
         'lonely' : ["#6d88e1", "#ecedb1", "#83d8db"]
         # name : [background, foreground, action]
-        # '' : ["#000000", "#000000", "#000000"]
+        # 'custom' : ["#000000", "#000000", "#000000"]
     }
-    themes = list(scheme_colors.keys())
+    schemes = list(scheme_colors.keys())
 
     # Create the window and initialize display values
     window = create_window()
