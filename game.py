@@ -407,6 +407,44 @@ def display_info():
     # Start the mainloop for the window
     info_window.mainloop()
 
+def dark_mode(switch = False):
+    global player_data
+
+    if switch:
+        player_data["dark_mode"] = not player_data["dark_mode"]
+
+    mode_icons = {True : "_dark_mode", False : ""}
+
+    # Access a window icon and set it for the window
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    icon_path = os.path.join(script_dir, f"assets/media/game{mode_icons[player_data['dark_mode']]}.ico")
+    window.iconbitmap(icon_path)
+
+    widget_types = ["TLabel", "TFrame", "TButton", "TNotebook"]
+    bg_color, fg_color, active_color = ["#100000", "#c60000", "#400000"] if player_data["dark_mode"] else ["lightgrey", "#000000", "#cccccc"]
+
+    for widget_type in widget_types:
+        game_window_style.configure(widget_type, background = bg_color, foreground = fg_color)
+
+    game_window_style.map("TButton", foreground = [('pressed', fg_color)], background = [('pressed', active_color)])
+
+    game_window_style.configure("TNotebook.Tab", background = bg_color, foreground = fg_color)
+    game_window_style.map("TNotebook.Tab", foreground = [('selected', fg_color)], background = [('selected', active_color)])
+
+    window.configure(bg = bg_color)
+
+    modes_display_values = {True : "Dark", False : "Light"}
+    mode_display = modes_display_values[player_data['dark_mode']]
+    
+    dark_mode_button.config(text = f"Mode: {mode_display}", command = lambda : dark_mode(True))
+
+    if switch:
+        print(f"Switched to {mode_display.lower()} mode.")
+
+    if player_data["easter_egg"]:
+        icon_path = os.path.join(script_dir, f"assets/media/game_dark_mode_glowing.ico")
+        window.iconbitmap(icon_path)
+    
 # Placeholder function for placeholder button
 def update_all_visuals():
     update_attribute_buttons()
@@ -414,8 +452,7 @@ def update_all_visuals():
     update_buy_setting_buttons()
     update_prestige_buttons()
     update_prestige_labels()
-
-    print("updated all buttons and labels")
+    dark_mode()
 
 # Save the game state to a file for persistence through runs of the code
 def save():
@@ -436,7 +473,7 @@ def save():
 
     for data_type in save_data:
         for data_point in save_data[data_type]:
-            if data_point in ["last_prestige_date", "autobuyer_state", "current_buy_amount"]:
+            if data_point in ["last_prestige_date", "autobuyer_state", "current_buy_amount", "dark_mode", "easter_egg"]:
                 continue
             save_data[data_type][data_point] = str(save_data[data_type][data_point])
 
@@ -457,7 +494,7 @@ def create_save():
     buy_settings = {'current_buy_amount': 1, 'autobuyer_state': False}
     # apm = Additional points multiplier, ud = Upgrade discount, mp10acps = Multiplier per 10 autoclicks per second, aum = Attribute upgrade multiplier, im = Idle multiplier, cm = Combo multiplier
     prestige_data = {'apm' : Decimal(1), 'ud' : Decimal(0), 'mp10acps' : 1, 'aum' : 1, 'im' : Decimal(1), 'cpm' : Decimal(0)}
-    player_data = {'last_play_time' : Decimal(time.time()), 'last_prestige_date' : "N/A"}
+    player_data = {'dark_mode' : False,'last_play_time' : Decimal(time.time()), 'last_prestige_date' : "N/A", 'easter_egg' : False}
 
     return currency, attributes, buy_settings, prestige_data, player_data
 
@@ -471,7 +508,7 @@ def load_save():
 
         for data_type in save_data:
             for data_point in save_data[data_type]:
-                if data_point in ["last_prestige_date", "autobuyer_state", "current_buy_amount"]:
+                if data_point in ["last_prestige_date", "autobuyer_state", "current_buy_amount", "dark_mode", "easter_egg"]:
                     continue
                 save_data[data_type][data_point] = Decimal(save_data[data_type][data_point])
 
@@ -487,10 +524,7 @@ def load_save():
 
         return currency, attributes, buy_settings, prestige_data, player_data
     except SyntaxError:
-        newlines()
-        print("The save data is invalid. Either delete assets/save or revert it to the default format, then reload the game.")
-        input("Press enter to continue...")
-        exit()
+        invalid_save()
 
 
 # Handle the user closing the game
@@ -504,7 +538,15 @@ def quit_game():
     # Stop all code
     exit()
 
-
+def invalid_save():
+    try:
+        window.destroy()
+    except NameError:
+        pass
+    newlines()
+    print("The save data is invalid. Either delete assets/save or revert it to the default format, then reload the game.")
+    input("Press enter to continue...\n\n\n")
+    exit()
 
 # Create the game window and return it
 def create_window():
@@ -515,7 +557,8 @@ def create_window():
     global prestige_text, prestige_button
     global ppoints_text, lp_text, apm_text, ud_text, mp10acps_text, aum_text, im_text, cpm_text
     global apm_upgrade_button, ud_upgrade_button, mp10acps_upgrade_button, aum_upgrade_button, im_upgrade_button, cpm_upgrade_button
-    global text_style
+    global dark_mode_button
+    global game_window_style
 
     # Initialize the game window
     game_window = tkinter.Tk()
@@ -545,9 +588,12 @@ def create_window():
     game_window.iconbitmap(icon_path)
 
     # Create the font style for buttons and labels
-    text_style = ttk.Style()
-    text_style.configure("TLabel", font=("TkDefaultFont", 12))
-    text_style.configure("TButton", font=("TkDefaultFont", 12))
+    game_window_style = ttk.Style()
+
+    game_window_style.theme_use("alt")
+
+    game_window_style.configure("TLabel", font=("TkDefaultFont", 12))
+    game_window_style.configure("TButton", font=("TkDefaultFont", 12))
 
     # Define how many rows and columns the window should have
     game_window_rows = 10
@@ -624,7 +670,7 @@ def create_window():
     im_upgrade_button = ttk.Button(prestige_shop_tab)
     cpm_upgrade_button = ttk.Button(prestige_shop_tab)
     
-    placeholder_button = ttk.Button(menu_tab, text = 'Update Visuals (debug)', command = update_all_visuals)
+    dark_mode_button = ttk.Button(menu_tab)
     info_button  = ttk.Button(menu_tab, text = 'Info', command = display_info)
     save_button  = ttk.Button(menu_tab, text = "Save", command = save)
     quit_button  = ttk.Button(menu_tab, text = "Quit", command = quit_game)
@@ -635,7 +681,7 @@ def create_window():
         buy_settings_tab : [autobuyer_button, cba_button], # put autobuyer buttons here
         prestige_tab : [prestige_text, prestige_button], # put prestige buttons here
         prestige_shop_tab : [ppoints_text, lp_text, apm_text, ud_text, mp10acps_text, aum_text, im_text, cpm_text, apm_upgrade_button, ud_upgrade_button, mp10acps_upgrade_button, aum_upgrade_button, im_upgrade_button, cpm_upgrade_button], # put prestige shop buttons here
-        menu_tab : [placeholder_button, info_button, save_button, quit_button]
+        menu_tab : [dark_mode_button, info_button, save_button, quit_button]
     }
     
     # Use the categories of buttons to put them in their respective tabs and weight each row/column in each tab
@@ -783,8 +829,8 @@ def adjust_font_size():
     new_font = ("TkDefaultFont", font_size)
 
     # Update labels and buttons with this new font
-    text_style.configure("TLabel", font = new_font)
-    text_style.configure("TButton", font = new_font)
+    game_window_style.configure("TLabel", font = new_font)
+    game_window_style.configure("TButton", font = new_font)
 
     # Update text wrap of prestige text
     prestige_text.config(wraplength = window.winfo_width(), text = 'Prestige will reset your points and attributes, but will give prestige points, which can be spent for persistent upgrades in the prestige shop. Prestiging requires 1e10 points, but the more points you have when you prestige, the more prestige points you gain from doing so.')
@@ -904,6 +950,8 @@ def game_loop():
 
     except OverflowError:
         beat_game()
+    except KeyError:
+        invalid_save()
 
 try:
 
@@ -971,11 +1019,8 @@ try:
 
     # Create the window and initialize display values
     window = create_window()
-    update_attribute_buttons()
-    update_buy_setting_buttons()
-    update_prestige_buttons()
-    update_prestige_labels()
-
+    update_all_visuals()
+    
     print("Done.")
 
     # Calculate how many points the user gained while offline, notify the user, and give them the points
@@ -992,7 +1037,7 @@ try:
     # Create the game window
     window.mainloop()
 
-
-
 except OverflowError:
     beat_game()
+except KeyError:
+    invalid_save()
